@@ -1,0 +1,78 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Java
+*.class
+*.log
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+.kiro/
+.agents/
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+._*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+retail_pos.db
+
+# Logs
+logs/
+*.log
+
+# Backups
+backups/
+*.bak
+*.backup
+
+# Distribution
+dist/
+installer/
+
+# Build artifacts
+*.exe
+*.sh
+*.bat
+build-*.sh
+build-*.bat
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# Application specific
+logo.ico
+dependency-reduced-pom.xml

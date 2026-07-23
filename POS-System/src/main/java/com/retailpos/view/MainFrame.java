@@ -1,0 +1,304 @@
+package com.retailpos.view;
+
+import com.retailpos.model.AppSettings;
+import com.retailpos.repository.SettingsRepository;
+import com.retailpos.service.AuthService;
+import com.retailpos.sync.SyncService;
+import com.retailpos.ui.Icons;
+import com.retailpos.ui.RetailThemeManager;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import java.awt.*;
+import java.awt.event.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.net.Inet4Address;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
+
+public class MainFrame extends JFrame {
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm dd/MM");
+    private JLabel statusUserLabel;
+    private JLabel statusTimeLabel;
+    private JLabel statusSyncLabel;
+    private JLabel statusOnlineLabel;
+    private JTabbedPane tabs;
+    private SalesPanel salesPanel;
+    private AppSettings settings;
+
+    public MainFrame() {
+        super("Victorious Shop POS");
+        loadSettings();
+        buildUI();
+        com.retailpos.service.MpesaUdpBridge.getInstance().start();
+        startSyncService();
+        startStatusTimer();
+        startPanelRefreshTimer();
+        applyTheme();
+    }
+
+    private void loadSettings() {
+        try { settings = new SettingsRepository().load(); }
+        catch (Exception e) { settings = new AppSettings(); }
+    }
+
+    private void buildUI() {
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
+        setMinimumSize(new Dimension(1200, 700));
+        setSize(1400, 860);
+        setLocationRelativeTo(null);
+
+        addWindowListener(new WindowAdapter() {
+            @Override public void windowClosing(WindowEvent e) {
+                int r = JOptionPane.showConfirmDialog(MainFrame.this,
+                    "Are you sure you want to exit?", "Exit", JOptionPane.YES_NO_OPTION);
+                if (r == JOptionPane.YES_OPTION) {
+                    SyncService.getInstance().stop();
+                    com.retailpos.util.DatabaseManager.close();
+                    System.exit(0);
+                }
+            }
+        });
+
+        JPanel root = new JPanel(new BorderLayout(0, 0));
+        root.setBackground(RetailThemeManager.SURFACE);
+
+        // Header
+        root.add(buildHeader(), BorderLayout.NORTH);
+
+        // Tabs
+        tabs = new JTabbedPane(JTabbedPane.LEFT);
+        tabs.putClientProperty("JTabbedPane.tabAreaAlignment", "fill");
+        tabs.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        tabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+
+        salesPanel = new SalesPanel();
+        JLabel salesTabIcon = new JLabel("Sales", Icons.get("cart", 18), SwingConstants.LEFT);
+        tabs.addTab(null, Icons.get("cart", 18), salesPanel, "F2 — Sales screen");
+        tabs.setTitleAt(0, "Sales");
+
+        if (AuthService.getInstance().isAdmin()) {
+            tabs.addTab("Dashboard",  Icons.get("dashboard",  18), new DashboardPanel());
+            tabs.addTab("Products",   Icons.get("products",   18), new ProductsPanel());
+            tabs.addTab("Suppliers",  Icons.get("purchases",  18), new SuppliersPanel());
+            tabs.addTab("Customers",  Icons.get("customers",  18), new CustomersPanel());
+            tabs.addTab("Inventory",  Icons.get("inventory",  18), new InventoryPanel());
+            tabs.addTab("Purchases",  Icons.get("purchases",  18), new PurchasesPanel());
+            tabs.addTab("Reports",    Icons.get("reports",    18), new ReportsPanel());
+            tabs.addTab("Settings",   Icons.get("settings",   18), new SettingsPanel());
+        } else {
+            tabs.addTab("Customers",  Icons.get("customers",  18), new CustomersPanel());
+        }
+
+        root.add(tabs, BorderLayout.CENTER);
+
+        // Status bar
+        root.add(buildStatusBar(), BorderLayout.SOUTH);
+
+        setContentPane(root);
+
+        // Global keyboard shortcuts
+        registerGlobalShortcuts();
+    }
+
+    private JComponent buildHeader() {
+        JPanel header = new JPanel(new BorderLayout(0, 0));
+        header.setBackground(RetailThemeManager.NAVY);
+        header.setBorder(new EmptyBorder(12, 20, 12, 20));
+
+        // Logo + title
+        JPanel brand = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        brand.setOpaque(false);
+        // Header icon — drawn, not emoji
+        JLabel icon = new JLabel(Icons.get("cart", 28));
+        JLabel title = new JLabel("  " + settings.getStoreName() + "  |  Point of Sale");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        title.setForeground(Color.WHITE);
+        brand.add(icon); brand.add(title);
+        header.add(brand, BorderLayout.WEST);
+
+        // Right controls
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        right.setOpaque(false);
+
+        statusSyncLabel = new JLabel("Sync: Ready");
+        statusSyncLabel.setIcon(Icons.get("sync", 14));
+        statusSyncLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        statusSyncLabel.setForeground(new Color(148, 163, 184));
+
+        statusOnlineLabel = new JLabel("Offline");
+        statusOnlineLabel.setIcon(Icons.get("offline", 12));
+        statusOnlineLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        statusOnlineLabel.setForeground(new Color(248, 113, 113));
+
+        JLabel bridgeAddress = new JLabel("Phone UDP: " + localIpv4Address() + ":45876");
+        bridgeAddress.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        bridgeAddress.setForeground(new Color(148, 163, 184));
+
+        JButton logoutBtn = new JButton("Logout");
+        logoutBtn.setIcon(Icons.get("logout", 16));
+        logoutBtn.setForeground(Color.WHITE); logoutBtn.setOpaque(false);
+        logoutBtn.setContentAreaFilled(false); logoutBtn.setBorderPainted(false);
+        logoutBtn.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        logoutBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        logoutBtn.addActionListener(e -> doLogout());
+
+        right.add(statusSyncLabel); right.add(statusOnlineLabel); right.add(bridgeAddress); right.add(logoutBtn);
+        header.add(right, BorderLayout.EAST);
+        return header;
+    }
+
+    private JComponent buildStatusBar() {
+        JPanel bar = new JPanel(new BorderLayout(0, 0));
+        bar.setBackground(new Color(30, 41, 59));
+        bar.setBorder(new EmptyBorder(5, 16, 5, 16));
+
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 0));
+        left.setOpaque(false);
+
+        AuthService auth = AuthService.getInstance();
+        statusUserLabel = new JLabel(auth.getCurrentUser().getFullName() +
+            " (" + auth.getCurrentUser().getRole() + ")");
+        statusUserLabel.setIcon(Icons.get("user", 14));
+        statusUserLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        statusUserLabel.setForeground(new Color(148, 163, 184));
+
+        statusTimeLabel = new JLabel();
+        statusTimeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        statusTimeLabel.setForeground(new Color(148, 163, 184));
+        updateSessionTime();
+
+        left.add(statusUserLabel); left.add(statusTimeLabel);
+        bar.add(left, BorderLayout.WEST);
+
+        JLabel versionLabel = new JLabel("Victorious Shop POS  |  Offline-ready");
+        versionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        versionLabel.setForeground(new Color(71, 85, 105));
+        bar.add(versionLabel, BorderLayout.EAST);
+        return bar;
+    }
+
+    private void registerGlobalShortcuts() {
+        // F2: focus sales tab
+        KeyStroke f2 = KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0);
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(f2, "sales");
+        getRootPane().getActionMap().put("sales", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                tabs.setSelectedIndex(0);
+                salesPanel.focusSearch();
+            }
+        });
+    }
+
+    private void startSyncService() {
+        SyncService sync = SyncService.getInstance();
+        sync.addStateListener((state, message) -> SwingUtilities.invokeLater(() -> {
+            switch (state) {
+                case IDLE -> {
+                    statusSyncLabel.setIcon(Icons.get("online", 12));
+                    statusSyncLabel.setText(message);
+                    statusSyncLabel.setForeground(new Color(148, 163, 184));
+                    statusOnlineLabel.setIcon(Icons.get("online", 12));
+                    statusOnlineLabel.setText("Online");
+                    statusOnlineLabel.setForeground(new Color(74, 222, 128));
+                }
+                case SYNCING -> {
+                    statusSyncLabel.setIcon(Icons.get("syncing", 12));
+                    statusSyncLabel.setText("Syncing...");
+                    statusSyncLabel.setForeground(new Color(251, 191, 36));
+                    statusOnlineLabel.setIcon(Icons.get("online", 12));
+                    statusOnlineLabel.setText("Online");
+                    statusOnlineLabel.setForeground(new Color(74, 222, 128));
+                }
+                case ERROR -> {
+                    statusSyncLabel.setIcon(Icons.get("warning", 14));
+                    statusSyncLabel.setText(message);
+                    statusSyncLabel.setForeground(new Color(248, 113, 113));
+                    statusOnlineLabel.setIcon(Icons.get("offline", 12));
+                    statusOnlineLabel.setText("Offline");
+                    statusOnlineLabel.setForeground(new Color(248, 113, 113));
+                }
+            }
+        }));
+        if (settings.isAutoSync()) sync.start();
+    }
+
+    private void startStatusTimer() {
+        Timer t = new Timer(30000, e -> updateSessionTime());
+        t.start();
+    }
+
+    private void startPanelRefreshTimer() {
+        Timer refreshTimer = new Timer(5000, event -> refreshVisiblePanel());
+        refreshTimer.setCoalesce(true);
+        refreshTimer.start();
+    }
+
+    private void refreshVisiblePanel() {
+        Component panel = tabs.getSelectedComponent();
+        if (panel == null || !panel.isShowing()) return;
+        for (String methodName : new String[] {"loadData", "loadAll", "doSearch", "loadCategoriesAndProducts", "loadSettings", "generateReport"}) {
+            try {
+                java.lang.reflect.Method method = panel.getClass().getDeclaredMethod(methodName);
+                method.setAccessible(true);
+                method.invoke(panel);
+                return;
+            } catch (NoSuchMethodException ignored) {
+                // Try the next conventional panel refresh method.
+            } catch (Exception ignored) {
+                return;
+            }
+        }
+    }
+
+    private void updateSessionTime() {
+        LocalDateTime start = AuthService.getInstance().getSessionStart();
+        if (start != null) {
+            statusTimeLabel.setText("  Session since: " + TIME_FMT.format(start));
+        }
+    }
+
+    private String localIpv4Address() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface network = interfaces.nextElement();
+                if (!network.isUp() || network.isLoopback() || network.isVirtual()) continue;
+                Enumeration<java.net.InetAddress> addresses = network.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    java.net.InetAddress address = addresses.nextElement();
+                    if (address instanceof Inet4Address && address.isSiteLocalAddress()) return address.getHostAddress();
+                }
+            }
+        } catch (Exception ignored) { }
+        return "Unavailable";
+    }
+
+    private void applyTheme() {
+        if (settings.isDarkMode()) RetailThemeManager.getInstance().apply(true);
+    }
+
+    private void doLogout() {
+        int r = JOptionPane.showConfirmDialog(this,
+            "Log out of this session?", "Logout", JOptionPane.YES_NO_OPTION);
+        if (r != JOptionPane.YES_OPTION) return;
+        AuthService.getInstance().logout();
+        SyncService.getInstance().stop();
+        dispose();
+        SwingUtilities.invokeLater(() -> {
+            try {
+                com.formdev.flatlaf.FlatLightLaf.setup();
+                LoginDialog login = new LoginDialog(null);
+                login.setVisible(true);
+                if (login.isLoginSuccessful()) {
+                    new MainFrame().setVisible(true);
+                } else {
+                    com.retailpos.util.DatabaseManager.close();
+                    System.exit(0);
+                }
+            } catch (Exception e) {
+                System.exit(1);
+            }
+        });
+    }
+}

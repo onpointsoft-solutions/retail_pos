@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">TransRouter</string>
+    <string name="privacy_notice">Reads only M-Pesa payment confirmations after you grant SMS permission. No data leaves your device except to your configured POS.</string>
+    <string name="grant_sms_permission">Grant SMS Permission</string>
+    <string name="pos_connection">POS Connection</string>
+    <string name="pos_connection_hint">Configure where to send parsed transactions.</string>
+    <string name="pos_host_hint">POS IP Address (e.g. 192.168.1.10)</string>
+    <string name="save_pos_connection">Save Configuration</string>
+    <string name="recent_transactions">Recent Transactions</string>
+    <string name="no_transactions">No M-Pesa confirmations received yet.</string>
+</resources>
