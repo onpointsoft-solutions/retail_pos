@@ -10,7 +10,7 @@ public class AppSettings {
     private int paperWidth = 80; // 58 or 80
     private double taxRate = 16.0;
     private double loyaltyEarningRate = 1.0; // points per KES 1 spent
-    private String syncApiUrl = "https://pos.victoriousgeneralshop.com/api/";
+    private String syncApiUrl = "https://pos.mobilemealscenter.co.ke/api/";
     private String syncApiToken = "";
     private String syncApiUsername = "admin";
     private String syncApiPassword = "";

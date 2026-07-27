@@ -248,7 +248,7 @@ INSERT INTO `app_settings` (`key`, `value`) VALUES
 ('paper_width','80'),
 ('tax_rate','0.0'),
 ('loyalty_earning_rate','1.0'),
-('sync_api_url','https://pos.victoriousgeneralshop.com/api/'),
+('sync_api_url','https://pos.mobilemealscenter.co.ke/api/'),
 ('sync_api_token','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjI3NzBjZDgtODYxZi0xMWYxLWJhZjctOWM3YmVmNzY1YTllIiwidXNlcm5hbWUiOiJlcmlja21vc2VzcyIsInJvbGUiOiJBRE1JTiIsInN0b3JlX2lkIjpudWxsLCJpYXQiOjE3ODQ4MDI4MzcsImV4cCI6MTc4NDg4OTIzN30.Qv8PVt0lVHMmTuSt8dZJO_sHBjQubv0Nns-b1373O7o'),
 ('sync_api_username','erickmosess'),
 ('sync_api_password','erick2030'),

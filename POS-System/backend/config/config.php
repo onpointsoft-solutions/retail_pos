@@ -8,6 +8,10 @@ define('APP_VERSION', '2.0.0');
 define('BACKUP_DIR', __DIR__ . '/../backups');
 define('MAX_LOGIN_ATTEMPTS', 5);
 define('LOCKOUT_MINUTES', 15);
+define('PUBLIC_API_URL', rtrim(
+    getenv('PUBLIC_API_URL') ?: 'https://pos.mobilemealscenter.co.ke/api',
+    '/'
+) . '/');
 
 /**
  * REQUIRE_AUTH — set to false to allow sync without authentication.

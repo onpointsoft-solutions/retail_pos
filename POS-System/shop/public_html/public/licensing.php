@@ -167,17 +167,20 @@ $plans = [
                                 </li>
                             <?php endforeach; ?>
                         </ul>
-                        <?php
-                            $message = "Hello, I want the {$plan['name']} BizFlow POS package ("
-                                . ($plan['popular'] ? 'recommended' : $plan['devices']) . ").";
-                        ?>
-                        <a href="https://wa.me/<?= $whatsAppNumber ?>?text=<?= urlencode($message) ?>"
-                           target="_blank"
+                        <a :href="'license-checkout.php?plan=<?= urlencode($plan['code']) ?>&period=' + (annual ? 'annual' : 'monthly')"
                            class="mt-9 inline-flex justify-center rounded-xl px-5 py-3.5 text-sm font-extrabold transition <?= $plan['popular'] ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-blue-200' : 'bg-slate-100 text-ink hover:bg-slate-200' ?>">
-                            Choose <?= htmlspecialchars($plan['name']) ?>
+                            Pay securely for <?= htmlspecialchars($plan['name']) ?>
                         </a>
                     </article>
                 <?php endforeach; ?>
+            </div>
+
+            <div class="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-5 text-center sm:flex-row sm:text-left">
+                <div>
+                    <p class="font-extrabold text-emerald-900">Secure automated activation</p>
+                    <p class="mt-1 text-sm text-emerald-800">Pay through Paystack and download your private activation TXT file immediately after verification.</p>
+                </div>
+                <span class="shrink-0 rounded-xl bg-white px-4 py-2 text-sm font-extrabold text-emerald-700 shadow-sm">KES · Paystack</span>
             </div>
 
             <div class="mt-16 rounded-3xl bg-ink px-7 py-10 lg:px-12 lg:py-12 text-white grid lg:grid-cols-[1.3fr_.7fr] gap-8 items-center overflow-hidden relative">

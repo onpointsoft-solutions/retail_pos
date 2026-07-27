@@ -208,7 +208,7 @@ INSERT INTO "app_settings" VALUES ('printer_name','(Default printer)');
 INSERT INTO "app_settings" VALUES ('paper_width','80');
 INSERT INTO "app_settings" VALUES ('tax_rate','0.0');
 INSERT INTO "app_settings" VALUES ('loyalty_earning_rate','1.0');
-INSERT INTO "app_settings" VALUES ('sync_api_url','https://pos.victoriousgeneralshop.com/api/');
+INSERT INTO "app_settings" VALUES ('sync_api_url','https://pos.mobilemealscenter.co.ke/api/');
 INSERT INTO "app_settings" VALUES ('sync_api_token','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjI3NzBjZDgtODYxZi0xMWYxLWJhZjctOWM3YmVmNzY1YTllIiwidXNlcm5hbWUiOiJlcmlja21vc2VzcyIsInJvbGUiOiJBRE1JTiIsInN0b3JlX2lkIjpudWxsLCJpYXQiOjE3ODQ4MDI4MzcsImV4cCI6MTc4NDg4OTIzN30.Qv8PVt0lVHMmTuSt8dZJO_sHBjQubv0Nns-b1373O7o');
 INSERT INTO "app_settings" VALUES ('sync_api_username','erickmosess');
 INSERT INTO "app_settings" VALUES ('sync_api_password','erick2030');

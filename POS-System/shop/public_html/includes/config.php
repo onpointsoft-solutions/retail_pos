@@ -1,16 +1,16 @@
 <?php
 // Database configuration
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'epmpmgem_victorious_pos');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'epmpmgem_victorious_pos');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
 // Product images are stored by the POS API on its own subdomain. Override this
 // in cPanel with PRODUCT_IMAGE_BASE_URL if the API hostname changes.
 define(
     'PRODUCT_IMAGE_BASE_URL',
-    rtrim(getenv('PRODUCT_IMAGE_BASE_URL') ?: 'https://pos.victoriousgeneralshop.com', '/')
+    rtrim(getenv('PRODUCT_IMAGE_BASE_URL') ?: 'https://pos.mobilemealscenter.co.ke', '/')
 );
 
 function shopProductImageUrl(?string $path): string {
@@ -57,6 +57,7 @@ function getDbConnection() {
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         return $pdo;
     } catch (PDOException $e) {
-        die("Database connection failed: " . $e->getMessage());
+        error_log('Shop database connection failed: ' . $e->getMessage());
+        throw new RuntimeException('The shop database is temporarily unavailable.');
     }
 }

@@ -10,7 +10,7 @@ import javax.swing.border.EmptyBorder;
 
 public class LicenseActivationDialog extends JDialog {
     public static final String PACKAGES_URL =
-        "https://victoriousgeneralshop.com/public/licensing.php";
+        "https://pos.mobilemealscenter.co.ke/public/licensing.php";
 
     private final LicenseService licenseService = LicenseService.getInstance();
     private final JTextField backendUrlField = RetailThemeManager.styledField();

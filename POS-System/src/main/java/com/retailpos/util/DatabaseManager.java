@@ -66,6 +66,7 @@ public class DatabaseManager {
             insertDefaultAdminIfEmpty(c);
             insertDefaultCategoriesIfEmpty(c);
             insertDefaultSettingsIfEmpty(c);
+            migrateDefaultBackendUrl(c);
         } catch (Exception e) {
             throw new RuntimeException("Failed to create tables: " + e.getMessage(), e);
         }
@@ -287,7 +288,7 @@ public class DatabaseManager {
                     {"store_name","Retail Shop"}, {"store_address",""}, {"store_phone",""},
                     {"store_footer","Thank you for shopping with us!"},{"logo_path",""},
                     {"printer_name",""},{"paper_width","80"},{"tax_rate","16.0"},
-                    {"loyalty_earning_rate","1.0"},{"sync_api_url","https://pos.victoriousgeneralshop.com/api/"},
+                    {"loyalty_earning_rate","1.0"},{"sync_api_url","https://pos.mobilemealscenter.co.ke/api/"},
                     {"sync_api_token",""},{"sync_api_username","admin"},{"sync_api_password",""},{"auto_sync","true"},{"dark_mode","false"},
                     {"backup_path","backups"},{"backup_time","23:00"},{"auto_print_receipt","true"},{"last_successful_sync",""}
                 };
@@ -300,6 +301,16 @@ public class DatabaseManager {
                     }
                 }
             }
+        }
+    }
+
+    private static void migrateDefaultBackendUrl(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "UPDATE app_settings SET value=? WHERE key='sync_api_url' AND value IN (?,?)")) {
+            statement.setString(1, "https://pos.mobilemealscenter.co.ke/api/");
+            statement.setString(2, "https://pos.victoriousgeneralshop.com/api/");
+            statement.setString(3, "http://localhost/retail-pos-api/api/");
+            statement.executeUpdate();
         }
     }
 }
