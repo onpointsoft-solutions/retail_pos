@@ -10,10 +10,15 @@ import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Background sync service — auto-authenticates with the PHP backend,
@@ -36,16 +41,22 @@ public class SyncService {
     private final List<SyncStateListener> listeners    = new CopyOnWriteArrayList<>();
     private final SettingsRepository      settingsRepo = new SettingsRepository();
     private final Gson gson = new GsonBuilder().create();
+    private final Map<String, Set<String>> columnCache = new ConcurrentHashMap<>();
 
     private int retryCount = 0;
     private static final int MAX_RETRIES     = 5;
     private static final int POLL_INTERVAL_S = 30;
     private static final int CONNECT_TIMEOUT = 6_000;
-    private static final int READ_TIMEOUT    = 30_000;
+    private static final int READ_TIMEOUT    = 120_000;
+    private static final int UPLOAD_BATCH_SIZE = 1000;
+    private static final int DOWNLOAD_BATCH_SIZE = 2000;
+    private static final DateTimeFormatter SQL_DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DateTimeFormatter UTC_SQL_DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
 
-    private static final String[] ENTITIES = {
-        "products", "product_images", "categories", "suppliers", "customers",
-        "sales", "inventory_movements", "purchase_orders", "users"
+    private static final String[] SYNC_ORDER = {
+        "categories", "suppliers", "customers", "users", "products",
+        "product_images", "purchase_orders", "sales", "inventory_movements",
+        "mpesa_transactions"
     };
 
     private SyncService() {}
@@ -108,13 +119,15 @@ public class SyncService {
         setState(SyncState.SYNCING, "Synchronising…");
         try {
             AppSettings settings = settingsRepo.load();
-            String apiUrl  = settings.getSyncApiUrl();
+            String apiUrl  = normalizeApiUrl(settings.getSyncApiUrl());
             if (apiUrl == null || apiUrl.isBlank()) {
                 setState(SyncState.IDLE, "Sync API URL not configured");
                 return;
             }
-            // Ensure URL ends with /
-            if (!apiUrl.endsWith("/")) apiUrl += "/";
+            if (usesLocalhost(apiUrl)) {
+                setState(SyncState.ERROR, "Use the backend computer IP, not localhost, for multi-computer sync");
+                return;
+            }
 
             // ── Step 1: Authenticate (or skip if no-auth mode) ────────────────
             String token = getOrRefreshToken(apiUrl, settings);
@@ -123,23 +136,27 @@ public class SyncService {
                 return;
             }
             // token == "" means no-auth mode (REQUIRE_AUTH=false on server)
+            String nextSyncCursor = fetchServerCursor(apiUrl, token);
 
-            // ── Step 2: Upload pending records ────────────────────────────────
+            // ── Step 2: Upload pending records in parallel ─────────────────────
             int uploaded = 0;
-            for (String entity : ENTITIES) {
+            for (String entity : SYNC_ORDER) {
                 uploaded += uploadEntity(apiUrl, token, entity);
             }
 
-            // ── Step 3: Download changes from server ──────────────────────────
-            String since = lastSyncTime != null
-                ? lastSyncTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + "Z"
-                : "2000-01-01T00:00:00Z";
+            // ── Step 3: Download changes from server in parallel ──────────────
+            String since = !isBlank(settings.getLastSuccessfulSync())
+                ? settings.getLastSuccessfulSync()
+                : "2000-01-01 00:00:00";
+
             int downloaded = 0;
-            for (String entity : ENTITIES) {
+            for (String entity : SYNC_ORDER) {
                 downloaded += downloadEntity(apiUrl, token, entity, since);
             }
 
             lastSyncTime = LocalDateTime.now();
+            settings.setLastSuccessfulSync(nextSyncCursor);
+            try { settingsRepo.save(settings); } catch (Exception ignored) {}
             String msg = "Synced " + lastSyncTime.format(DateTimeFormatter.ofPattern("HH:mm"));
             if (uploaded   > 0) msg += " | up: "   + uploaded;
             if (downloaded > 0) msg += " | down: " + downloaded;
@@ -229,44 +246,46 @@ public class SyncService {
 
     @SuppressWarnings("unchecked")
     private int uploadEntity(String apiUrl, String token, String entityType) {
-        List<Map<String, Object>> pending = fetchPendingRecords(entityType);
-        if (pending.isEmpty()) return 0;
+        int uploaded = 0;
+        while (true) {
+            List<Map<String, Object>> pending = fetchPendingRecords(entityType, UPLOAD_BATCH_SIZE);
+            if (pending.isEmpty()) return uploaded;
 
-        try {
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("entity_type", entityType);
-            body.put("records", pending);
+            try {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("entity_type", entityType);
+                body.put("records", pending);
 
-            String response = post(apiUrl + "sync/upload", token, gson.toJson(body));
+                String response = post(apiUrl + "sync/upload", token, gson.toJson(body));
 
-            // Guard: if response is not JSON, log and skip
-            if (!response.trim().startsWith("{")) {
-                System.err.println("[SyncService] Non-JSON response for upload/" + entityType
-                    + ": " + response.substring(0, Math.min(200, response.length())));
-                return 0;
+                if (!response.trim().startsWith("{")) {
+                    System.err.println("[SyncService] Non-JSON response for upload/" + entityType
+                        + ": " + response.substring(0, Math.min(200, response.length())));
+                    throw new IllegalStateException("Backend returned non-JSON for " + entityType);
+                }
+
+                Map<String, Object> result = gson.fromJson(response, Map.class);
+
+                List<String> acceptedIds = extractAcceptedIds(result, pending);
+                if (!acceptedIds.isEmpty()) {
+                    markSynced(entityType, acceptedIds);
+                }
+
+                List<Map<String, Object>> conflicts =
+                    (List<Map<String, Object>>) result.getOrDefault("conflicts", Collections.emptyList());
+                for (Map<String, Object> c : conflicts) {
+                    AuditLogger.log("SYSTEM", "SYNC_CONFLICT", String.valueOf(c.get("id")),
+                        entityType + ": " + c.getOrDefault("reason", ""));
+                }
+
+                uploaded += acceptedIds.size();
+                if (pending.size() < UPLOAD_BATCH_SIZE || acceptedIds.isEmpty()) return uploaded;
+            } catch (Exception e) {
+                if (e.getMessage() != null && e.getMessage().contains("401")) {
+                    backendToken = null; tokenExpiresAtMs = 0;
+                }
+                throw new IllegalStateException("Upload failed for " + entityType + ": " + e.getMessage(), e);
             }
-
-            Map<String, Object> result = gson.fromJson(response, Map.class);
-
-            Number success = (Number) result.getOrDefault("success", 0);
-            if (success.intValue() > 0) {
-                markSynced(entityType, extractIds(pending));
-            }
-
-            List<Map<String, Object>> conflicts =
-                (List<Map<String, Object>>) result.getOrDefault("conflicts", Collections.emptyList());
-            for (Map<String, Object> c : conflicts) {
-                AuditLogger.log("SYSTEM", "SYNC_CONFLICT", String.valueOf(c.get("id")),
-                    entityType + ": " + c.getOrDefault("reason", ""));
-            }
-            return success.intValue();
-        } catch (Exception e) {
-            // 401 = token expired, clear it so next cycle re-authenticates
-            if (e.getMessage() != null && e.getMessage().contains("401")) {
-                backendToken = null; tokenExpiresAtMs = 0;
-            }
-            System.err.println("[SyncService] Upload failed for " + entityType + ": " + e.getMessage());
-            return 0;
         }
     }
 
@@ -275,55 +294,137 @@ public class SyncService {
     @SuppressWarnings("unchecked")
     private int downloadEntity(String apiUrl, String token, String entityType, String since) {
         try {
-            String url = apiUrl + "sync/download/" + entityType + "?since="
-                + URLEncoder.encode(since, StandardCharsets.UTF_8);
-            String response = get(url, token);
+            int downloaded = 0;
+            int offset = 0;
+            while (true) {
+                String url = apiUrl + "sync/download/" + entityType + "?since="
+                    + URLEncoder.encode(since, StandardCharsets.UTF_8)
+                    + "&limit=" + DOWNLOAD_BATCH_SIZE + "&offset=" + offset;
+                String response = get(url, token);
 
-            Map<String, Object> result = gson.fromJson(response, Map.class);
-            List<Map<String, Object>> records =
-                (List<Map<String, Object>>) result.getOrDefault("records", Collections.emptyList());
-            if (records.isEmpty()) return 0;
-            if ("products".equals(entityType)) cacheProductImages(apiUrl, token, records);
+                Map<String, Object> result = gson.fromJson(response, Map.class);
+                List<Map<String, Object>> records =
+                    (List<Map<String, Object>>) result.getOrDefault("records", Collections.emptyList());
+                if (records.isEmpty()) return downloaded;
+                if ("products".equals(entityType)) cacheProductImages(apiUrl, token, records);
 
-            upsertRecords(entityType, records);
-            return records.size();
+                upsertRecords(entityType, records);
+                downloaded += records.size();
+                if (records.size() < DOWNLOAD_BATCH_SIZE) return downloaded;
+                offset += records.size();
+            }
         } catch (Exception e) {
             if (e.getMessage() != null && e.getMessage().contains("401")) {
                 backendToken = null; tokenExpiresAtMs = 0;
             }
-            System.err.println("[SyncService] Download failed for " + entityType + ": " + e.getMessage());
-            return 0;
+            throw new IllegalStateException("Download failed for " + entityType + ": " + e.getMessage(), e);
         }
     }
 
     // ── DB helpers ────────────────────────────────────────────────────────────
 
-    private List<Map<String, Object>> fetchPendingRecords(String entityType) {
+    private List<Map<String, Object>> fetchPendingRecords(String entityType, int limit) {
+        Set<String> columns = getLocalColumns(entityType);
+        String orderBy = columns.contains("updated_at") ? "updated_at" : columns.contains("created_at") ? "created_at" : "id";
         String sql;
-        if ("users".equals(entityType)) {
-            // Never upload password_hash
-            sql = "SELECT id,username,role,full_name,active,sync_status,created_at,updated_at " +
-                  "FROM users WHERE sync_status IN ('PENDING','MODIFIED','DELETED') LIMIT 200";
-        } else {
-            sql = "SELECT * FROM " + entityType +
-                  " WHERE sync_status IN ('PENDING','MODIFIED','DELETED') LIMIT 200";
-        }
+        sql = "SELECT * FROM " + entityType +
+              " WHERE sync_status IN ('PENDING','MODIFIED','DELETED') ORDER BY " + orderBy + ", id LIMIT ?";
         List<Map<String, Object>> rows = new ArrayList<>();
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+             ) {
+            ps.setInt(1, limit);
+            ResultSet rs = ps.executeQuery();
             ResultSetMetaData meta = rs.getMetaData();
             int cols = meta.getColumnCount();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
-                for (int i = 1; i <= cols; i++) row.put(meta.getColumnName(i), rs.getObject(i));
+                for (int i = 1; i <= cols; i++) {
+                    String column = meta.getColumnName(i);
+                    row.put(column, normalizeOutgoingValue(column, rs.getObject(i)));
+                }
                 if ("products".equals(entityType)) attachImageBlobs(row);
                 rows.add(row);
             }
+            rs.close();
+
+            // Bulk fetch child records to avoid N+1 query problem
+            if ("sales".equals(entityType)) {
+                Set<String> saleIds = rows.stream().map(r -> String.valueOf(r.get("id"))).collect(java.util.stream.Collectors.toSet());
+                Map<String, List<Map<String, Object>>> allItems = fetchAllChildRows("sale_items", "sale_id", saleIds);
+                for (Map<String, Object> row : rows) {
+                    String id = String.valueOf(row.get("id"));
+                    if (allItems.containsKey(id)) row.put("items", allItems.get(id));
+                }
+            }
+            if ("purchase_orders".equals(entityType)) {
+                Set<String> poIds = rows.stream().map(r -> String.valueOf(r.get("id"))).collect(java.util.stream.Collectors.toSet());
+                Map<String, List<Map<String, Object>>> allItems = fetchAllChildRows("purchase_order_items", "po_id", poIds);
+                for (Map<String, Object> row : rows) {
+                    String id = String.valueOf(row.get("id"));
+                    if (allItems.containsKey(id)) row.put("items", allItems.get(id));
+                }
+            }
         } catch (Exception e) {
-            System.err.println("[SyncService] fetchPending failed for " + entityType + ": " + e.getMessage());
+            throw new IllegalStateException("Could not read pending " + entityType + " records", e);
         }
         return rows;
+    }
+
+    private void attachChildRows(Map<String, Object> parent, String childTable, String foreignKey) {
+        Object parentId = parent.get("id");
+        if (parentId == null) return;
+        List<Map<String, Object>> children = new ArrayList<>();
+        try (Connection c = DatabaseManager.getConnection();
+             PreparedStatement ps = c.prepareStatement("SELECT * FROM " + childTable + " WHERE " + foreignKey + "=?")) {
+            ps.setString(1, parentId.toString());
+            ResultSet rs = ps.executeQuery();
+            ResultSetMetaData meta = rs.getMetaData();
+            int cols = meta.getColumnCount();
+            while (rs.next()) {
+                Map<String, Object> child = new LinkedHashMap<>();
+                for (int i = 1; i <= cols; i++) {
+                    String column = meta.getColumnName(i);
+                    child.put(column, normalizeOutgoingValue(column, rs.getObject(i)));
+                }
+                children.add(child);
+            }
+        } catch (Exception e) {
+            System.err.println("[SyncService] child fetch failed for " + childTable + ": " + e.getMessage());
+        }
+        if (!children.isEmpty()) parent.put("items", children);
+    }
+
+    private Map<String, List<Map<String, Object>>> fetchAllChildRows(String childTable, String foreignKey, Set<String> parentIds) {
+        Map<String, List<Map<String, Object>>> result = new HashMap<>();
+        if (parentIds.isEmpty()) return result;
+
+        try (Connection c = DatabaseManager.getConnection()) {
+            String ph = String.join(",", Collections.nCopies(parentIds.size(), "?"));
+            String sql = "SELECT * FROM " + childTable + " WHERE " + foreignKey + " IN (" + ph + ")";
+            try (PreparedStatement ps = c.prepareStatement(sql)) {
+                int i = 1;
+                for (String id : parentIds) {
+                    ps.setString(i++, id);
+                }
+                ResultSet rs = ps.executeQuery();
+                ResultSetMetaData meta = rs.getMetaData();
+                int cols = meta.getColumnCount();
+
+                while (rs.next()) {
+                    String parentId = rs.getString(foreignKey);
+                    Map<String, Object> child = new LinkedHashMap<>();
+                    for (int j = 1; j <= cols; j++) {
+                        String column = meta.getColumnName(j);
+                        child.put(column, normalizeOutgoingValue(column, rs.getObject(j)));
+                    }
+                    result.computeIfAbsent(parentId, k -> new ArrayList<>()).add(child);
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not read child records from " + childTable, e);
+        }
+        return result;
     }
 
     private void attachImageBlobs(Map<String, Object> product) {
@@ -346,24 +447,61 @@ public class SyncService {
 
     private void cacheProductImages(String apiUrl, String token, List<Map<String, Object>> products) {
         String webRoot = apiUrl.replaceFirst("api/?$", "");
+
+        // Collect all image URLs to download
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        Map<String, List<String>> productImageMap = new HashMap<>();
+        AtomicBoolean imageDownloadFailed = new AtomicBoolean(false);
+
         for (Map<String, Object> product : products) {
             Object value = product.get("image_path");
             if (value == null) continue;
-            List<String> cached = new ArrayList<>();
-            for (String path : value.toString().split(";")) {
-                try {
-                    if (!path.startsWith("http") && !path.startsWith("uploads/")) { cached.add(path); continue; }
-                    String url = path.startsWith("http") ? path : webRoot + path;
-                    String name = url.substring(url.lastIndexOf('/') + 1).replaceAll("[^A-Za-z0-9._-]", "_");
-                    java.nio.file.Path destination = com.retailpos.util.AppPaths.imageDirectory().resolve(name);
-                    HttpURLConnection connection = openConn(url, token, "GET");
-                    try (InputStream input = connection.getInputStream()) {
-                        java.nio.file.Files.copy(input, destination, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            String productId = String.valueOf(product.get("id"));
+            List<String> paths = Arrays.asList(value.toString().split(";"));
+            productImageMap.put(productId, new ArrayList<>());
+
+            for (String path : paths) {
+                if (!path.startsWith("http") && !path.startsWith("uploads/")) {
+                    productImageMap.get(productId).add(path);
+                    continue;
+                }
+
+                String url = path.startsWith("http") ? path : webRoot + path;
+                String name = url.substring(url.lastIndexOf('/') + 1).replaceAll("[^A-Za-z0-9._-]", "_");
+
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        java.nio.file.Path destination = com.retailpos.util.AppPaths.imageDirectory().resolve(name);
+                        HttpURLConnection connection = openConn(url, token, "GET");
+                        try (InputStream input = connection.getInputStream()) {
+                            java.nio.file.Files.copy(input, destination, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        }
+                        synchronized (productImageMap) {
+                            productImageMap.get(productId).add(destination.toString());
+                        }
+                    } catch (Exception ignored) {
+                        imageDownloadFailed.set(true);
+                        synchronized (productImageMap) {
+                            productImageMap.get(productId).add(path);
+                        }
                     }
-                    cached.add(destination.toString());
-                } catch (Exception ignored) { cached.add(path); }
+                }));
             }
-            product.put("image_path", String.join(";", cached));
+        }
+
+        // Wait for all downloads to complete
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        if (imageDownloadFailed.get()) {
+            throw new IllegalStateException("One or more product images could not be downloaded");
+        }
+
+        // Update product image paths
+        for (Map<String, Object> product : products) {
+            String productId = String.valueOf(product.get("id"));
+            if (productImageMap.containsKey(productId)) {
+                product.put("image_path", String.join(";", productImageMap.get(productId)));
+            }
         }
     }
 
@@ -386,6 +524,35 @@ public class SyncService {
         for (Map<String, Object> r : records) {
             Object id = r.get("id");
             if (id != null) ids.add(id.toString());
+        }
+        return ids;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> extractAcceptedIds(Map<String, Object> result, List<Map<String, Object>> pending) {
+        Object accepted = result.get("accepted_ids");
+        if (accepted instanceof List<?> list) {
+            List<String> ids = new ArrayList<>();
+            for (Object id : list) if (id != null) ids.add(id.toString());
+            return ids;
+        }
+
+        Set<String> blocked = new HashSet<>();
+        for (String key : List.of("conflicts", "errors")) {
+            Object rows = result.get(key);
+            if (rows instanceof List<?> list) {
+                for (Object row : list) {
+                    if (row instanceof Map<?, ?> map && map.get("id") != null) {
+                        blocked.add(map.get("id").toString());
+                    }
+                }
+            }
+        }
+
+        List<String> ids = new ArrayList<>();
+        for (Map<String, Object> record : pending) {
+            Object id = record.get("id");
+            if (id != null && !blocked.contains(id.toString())) ids.add(id.toString());
         }
         return ids;
     }
@@ -423,7 +590,9 @@ public class SyncService {
                 // Conflict resolution: keep local if newer
                 String serverUpdated = String.valueOf(rec.getOrDefault("updated_at", ""));
                 if (localUpdated != null && !serverUpdated.equals("null") && !serverUpdated.isEmpty()) {
-                    if (localUpdated.compareTo(serverUpdated) > 0) continue;
+                    Instant localInstant = parseFlexibleInstant(localUpdated);
+                    Instant serverInstant = parseFlexibleInstant(serverUpdated);
+                    if (localInstant != null && serverInstant != null && localInstant.isAfter(serverInstant)) continue;
                 }
 
                 // Filter record to only columns that exist in the local SQLite table
@@ -433,7 +602,7 @@ public class SyncService {
                     String col = e.getKey();
                     if (!localColumns.contains(col)) continue; // skip unknown columns
                     colList.add(col);
-                    vals.add(e.getValue());
+                    vals.add(normalizeIncomingValue(col, e.getValue()));
                 }
 
                 if (colList.isEmpty()) continue;
@@ -445,8 +614,7 @@ public class SyncService {
                         sb.append("`").append(colList.get(i)).append("`=?");
                         if (i < colList.size() - 1) sb.append(",");
                     }
-                    // Only set sync_status if column exists
-                    if (localColumns.contains("sync_status")) sb.append(",sync_status='SYNCED'");
+                    if (localColumns.contains("sync_status") && !colList.contains("sync_status")) sb.append(",sync_status='SYNCED'");
                     sb.append(" WHERE id=?");
                     try (Connection c = DatabaseManager.getConnection();
                          PreparedStatement ps = c.prepareStatement(sb.toString())) {
@@ -463,7 +631,7 @@ public class SyncService {
                         phs.append("?");
                         if (i < colList.size() - 1) { cols.append(","); phs.append(","); }
                     }
-                    if (localColumns.contains("sync_status")) {
+                    if (localColumns.contains("sync_status") && !colList.contains("sync_status")) {
                         cols.append(",sync_status");
                         phs.append(",'SYNCED'");
                     }
@@ -474,23 +642,75 @@ public class SyncService {
                         ps.executeUpdate();
                     }
                 }
+                if ("sales".equals(entityType)) upsertChildRecords("sale_items", "sale_id", id, rec.get("items"));
+                if ("purchase_orders".equals(entityType)) upsertChildRecords("purchase_order_items", "po_id", id, rec.get("items"));
             } catch (Exception e) {
-                System.err.println("[SyncService] Upsert failed: " + e.getMessage());
+                throw new IllegalStateException(
+                    "Could not apply " + entityType + " record " + rec.get("id"), e);
             }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void upsertChildRecords(String table, String parentColumn, String parentId, Object rawItems) {
+        if (!(rawItems instanceof List<?> items) || items.isEmpty()) return;
+        Set<String> localColumns = getLocalColumns(table);
+        if (localColumns.isEmpty()) return;
+
+        try (Connection c = DatabaseManager.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement delete = c.prepareStatement("DELETE FROM " + table + " WHERE " + parentColumn + "=?")) {
+                    delete.setString(1, parentId);
+                    delete.executeUpdate();
+                }
+                for (Object item : items) {
+                    if (!(item instanceof Map<?, ?> raw)) continue;
+                    List<String> cols = new ArrayList<>();
+                    List<Object> vals = new ArrayList<>();
+                    for (Map.Entry<?, ?> entry : raw.entrySet()) {
+                        String col = String.valueOf(entry.getKey());
+                        if (!localColumns.contains(col)) continue;
+                        cols.add(col);
+                        vals.add(normalizeIncomingValue(col, entry.getValue()));
+                    }
+                    if (!cols.contains(parentColumn) && localColumns.contains(parentColumn)) {
+                        cols.add(parentColumn);
+                        vals.add(parentId);
+                    }
+                    if (cols.isEmpty()) continue;
+                    String placeholders = String.join(",", Collections.nCopies(cols.size(), "?"));
+                    String sql = "INSERT OR REPLACE INTO " + table + " (`" + String.join("`,`", cols) + "`) VALUES (" + placeholders + ")";
+                    try (PreparedStatement ps = c.prepareStatement(sql)) {
+                        for (int i = 0; i < vals.size(); i++) ps.setObject(i + 1, vals.get(i));
+                        ps.executeUpdate();
+                    }
+                }
+                c.commit();
+            } catch (Exception e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(true);
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not apply child records for " + table, e);
         }
     }
 
     /** Returns the set of column names that exist in the local SQLite table. */
     private Set<String> getLocalColumns(String table) {
-        Set<String> cols = new java.util.LinkedHashSet<>();
-        try (Connection c = DatabaseManager.getConnection();
-             PreparedStatement ps = c.prepareStatement("PRAGMA table_info(" + table + ")");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) cols.add(rs.getString("name"));
-        } catch (Exception e) {
-            System.err.println("[SyncService] getLocalColumns failed for " + table + ": " + e.getMessage());
-        }
-        return cols;
+        return columnCache.computeIfAbsent(table, t -> {
+            Set<String> cols = new java.util.LinkedHashSet<>();
+            try (Connection c = DatabaseManager.getConnection();
+                 PreparedStatement ps = c.prepareStatement("PRAGMA table_info(" + t + ")");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) cols.add(rs.getString("name"));
+            } catch (Exception e) {
+                System.err.println("[SyncService] getLocalColumns failed for " + t + ": " + e.getMessage());
+            }
+            return cols;
+        });
     }
 
     // ── HTTP helpers ──────────────────────────────────────────────────────────
@@ -508,11 +728,27 @@ public class SyncService {
         return readResponse(openConn(url, token, "GET"));
     }
 
+    @SuppressWarnings("unchecked")
+    private String fetchServerCursor(String apiUrl, String token) throws Exception {
+        Map<String, Object> status = gson.fromJson(get(apiUrl + "sync/status", token), Map.class);
+        Instant serverTime = parseFlexibleInstant(String.valueOf(status.get("server_time")));
+        if (serverTime == null) {
+            throw new IllegalStateException("Backend did not return a valid server time");
+        }
+        return formatForSqlUtc(serverTime.minusSeconds(2));
+    }
+
     private HttpURLConnection openConn(String url, String token, String method) throws Exception {
+        // Enable HTTP connection pooling and keep-alive
+        System.setProperty("http.keepAlive", "true");
+        System.setProperty("http.maxConnections", "20");
+        System.setProperty("http.maxRedirects", "5");
+
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setRequestMethod(method);
         c.setRequestProperty("Content-Type", "application/json");
         c.setRequestProperty("Accept", "application/json");
+        c.setRequestProperty("Accept-Encoding", "gzip"); // Enable compression
         // Only send Authorization header when a non-blank token is available
         if (token != null && !token.isBlank()) {
             c.setRequestProperty("Authorization", "Bearer " + token);
@@ -526,6 +762,13 @@ public class SyncService {
         int code = conn.getResponseCode();
         InputStream is = (code >= 400) ? conn.getErrorStream() : conn.getInputStream();
         if (is == null) return "{}";
+        
+        // Handle gzip decompression
+        String encoding = conn.getContentEncoding();
+        if (encoding != null && encoding.contains("gzip")) {
+            is = new java.util.zip.GZIPInputStream(is);
+        }
+        
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(is, StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
@@ -539,7 +782,8 @@ public class SyncService {
     }
 
     private boolean isOnline(String apiUrl) {
-        if (apiUrl == null || apiUrl.isBlank()) return false;
+        apiUrl = normalizeApiUrl(apiUrl);
+        if (apiUrl == null || apiUrl.isBlank() || usesLocalhost(apiUrl)) return false;
         try {
             String healthUrl = apiUrl.endsWith("/") ? apiUrl + "health" : apiUrl + "/health";
             HttpURLConnection c = (HttpURLConnection) new URL(healthUrl).openConnection();
@@ -549,6 +793,93 @@ public class SyncService {
             c.disconnect();
             return code < 500;
         } catch (Exception e) { return false; }
+    }
+
+    public String testConnection(String apiUrl) {
+        apiUrl = normalizeApiUrl(apiUrl);
+        if (apiUrl == null || apiUrl.isBlank()) return "Sync API URL is empty.";
+        if (usesLocalhost(apiUrl)) {
+            return "This URL uses localhost. For many computers, use the backend server IP, for example http://192.168.1.20/retail-pos-api/api/";
+        }
+        try {
+            String healthUrl = apiUrl + "health";
+            HttpURLConnection connection = openConn(healthUrl, null, "GET");
+            connection.setReadTimeout(10_000);
+            String response = readResponse(connection);
+            return response.trim().startsWith("{")
+                ? "Connected successfully to shared backend."
+                : "Backend responded, but not with JSON. Check the /api/ path.";
+        } catch (Exception exception) {
+            return "Connection failed: " + exception.getMessage();
+        }
+    }
+
+    private String normalizeApiUrl(String apiUrl) {
+        if (apiUrl == null) return null;
+        String normalized = apiUrl.trim();
+        if (normalized.isEmpty()) return normalized;
+        return normalized.endsWith("/") ? normalized : normalized + "/";
+    }
+
+    private boolean usesLocalhost(String apiUrl) {
+        String lower = apiUrl == null ? "" : apiUrl.toLowerCase(Locale.ROOT);
+        return lower.contains("://localhost") || lower.contains("://127.0.0.1") || lower.contains("://0.0.0.0");
+    }
+
+    private Object normalizeOutgoingValue(String column, Object value) {
+        if (value == null || !isDateTimeColumn(column)) return value;
+        return normalizeDateForSql(value.toString());
+    }
+
+    private Object normalizeIncomingValue(String column, Object value) {
+        if (value == null || !isDateTimeColumn(column)) return value;
+        String normalized = normalizeDateForLocal(value.toString());
+        return normalized != null ? normalized : value;
+    }
+
+    private boolean isDateTimeColumn(String column) {
+        return column != null && (column.endsWith("_at") || "lockout_until".equals(column));
+    }
+
+    private String normalizeDateForSql(String value) {
+        LocalDateTime local = parseFlexibleLocal(value);
+        return local != null ? formatForSql(local) : value;
+    }
+
+    private String normalizeDateForLocal(String value) {
+        LocalDateTime local = parseFlexibleLocal(value);
+        return local != null ? local.toString() : value;
+    }
+
+    private String formatForSql(LocalDateTime value) {
+        return value.withNano(0).format(SQL_DATE_TIME);
+    }
+
+    private String formatForSqlUtc(Instant value) {
+        return UTC_SQL_DATE_TIME.format(value);
+    }
+
+    private LocalDateTime parseFlexibleLocal(String value) {
+        if (isBlank(value) || "null".equalsIgnoreCase(value)) return null;
+        String trimmed = value.trim();
+        try { return LocalDateTime.parse(trimmed); } catch (DateTimeParseException ignored) { }
+        try { return LocalDateTime.parse(trimmed.replace(' ', 'T')); } catch (DateTimeParseException ignored) { }
+        Instant instant = parseFlexibleInstant(trimmed);
+        if (instant != null) return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+        return null;
+    }
+
+    private Instant parseFlexibleInstant(String value) {
+        if (isBlank(value) || "null".equalsIgnoreCase(value)) return null;
+        String trimmed = value.trim();
+        try { return Instant.parse(trimmed); } catch (DateTimeParseException ignored) { }
+        try { return LocalDateTime.parse(trimmed).atZone(ZoneId.systemDefault()).toInstant(); } catch (DateTimeParseException ignored) { }
+        try { return LocalDateTime.parse(trimmed.replace(' ', 'T')).atZone(ZoneId.systemDefault()).toInstant(); } catch (DateTimeParseException ignored) { }
+        return null;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     // ── State ─────────────────────────────────────────────────────────────────

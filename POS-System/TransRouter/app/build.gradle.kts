@@ -31,6 +31,11 @@ android {
     }
 }
 
+// Compatibility task for tools/IDE versions expecting older AGP task names
+tasks.register("unitTestClasses") {
+    dependsOn(tasks.matching { it.name.contains("UnitTest") && (it.name.endsWith("Sources") || it.name.contains("JavaWithJavac") || it.name.contains("Kotlin")) })
+}
+
 dependencies {
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)

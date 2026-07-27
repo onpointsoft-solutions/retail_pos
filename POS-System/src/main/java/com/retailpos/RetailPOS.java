@@ -2,10 +2,12 @@ package com.retailpos;
 
 import com.formdev.flatlaf.FlatLightLaf;
 import com.retailpos.service.AuthService;
+import com.retailpos.service.LicenseService;
 import com.retailpos.ui.RetailThemeManager;
 import com.retailpos.util.DatabaseManager;
 import com.retailpos.util.AppPaths;
 import com.retailpos.view.LoginDialog;
+import com.retailpos.view.LicenseActivationDialog;
 import com.retailpos.view.MainFrame;
 import com.retailpos.view.SetupWizard;
 import javax.swing.*;
@@ -45,6 +47,18 @@ public class RetailPOS {
                     settings = settingsRepo.load();
                 }
 
+                LicenseService.LicenseSnapshot license =
+                    LicenseService.getInstance().checkAccess();
+                if (!license.isAllowed()) {
+                    LicenseActivationDialog activation =
+                        new LicenseActivationDialog(null, license, false);
+                    activation.setVisible(true);
+                    if (!activation.isActivated()) {
+                        DatabaseManager.close();
+                        System.exit(0);
+                        return;
+                    }
+                }
 
                 // Show login
                 LoginDialog login = new LoginDialog(null);
@@ -69,7 +83,7 @@ public class RetailPOS {
 
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(null,
-                    "Failed to start Retail POS:\n" + e.getMessage(),
+                    "Failed to start BizFlow POS:\n" + e.getMessage(),
                     "Startup Error", JOptionPane.ERROR_MESSAGE);
                 e.printStackTrace();
                 System.exit(1);

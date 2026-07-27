@@ -73,16 +73,19 @@ public class ProductsPanel extends JPanel {
         categoryFilter.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         categoryFilter.setPreferredSize(new Dimension(190, 42));
         categoryFilter.addActionListener(e -> { currentPage = 0; loadData(); });
+        JButton clearFiltersBtn = RetailThemeManager.secondaryButton("Clear Filters");
+        clearFiltersBtn.addActionListener(e -> clearFilters());
         left.add(new JLabel(Icons.get("search", 20)));
         left.add(searchField);
         left.add(categoryFilter);
+        left.add(clearFiltersBtn);
         toolbar.add(left, BorderLayout.WEST);
 
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.setOpaque(false);
         JButton addBtn     = RetailThemeManager.primaryButton("Add Product", "add");
         JButton editBtn    = RetailThemeManager.secondaryButton("Edit", "edit");
-        JButton deleteBtn  = RetailThemeManager.dangerButton("Delete", "delete");
+        JButton deleteBtn  = RetailThemeManager.dangerButton("Delete Selected", "delete");
         JButton barcodeBtn = RetailThemeManager.secondaryButton("Barcode/QR", "barcode");
         JButton prevBtn    = RetailThemeManager.secondaryButton("Prev");
         JButton nextBtn    = RetailThemeManager.secondaryButton("Next");
@@ -113,6 +116,7 @@ public class ProductsPanel extends JPanel {
             @Override public Class<?> getColumnClass(int c) { return c == 0 ? Icon.class : Object.class; }
         };
         table = RetailThemeManager.styledTable(tableModel);
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         table.setRowHeight(56);
         table.getColumnModel().getColumn(0).setPreferredWidth(62);
         table.getColumnModel().getColumn(1).setPreferredWidth(200);
@@ -166,6 +170,14 @@ public class ProductsPanel extends JPanel {
         searchDebounce = new Timer(150, e -> { currentPage = 0; loadData(); });
         searchDebounce.setRepeats(false);
         searchDebounce.start();
+    }
+
+    private void clearFilters() {
+        if (searchDebounce != null) searchDebounce.stop();
+        searchField.setText("");
+        if (categoryFilter.getItemCount() > 0) categoryFilter.setSelectedIndex(0);
+        currentPage = 0;
+        loadData();
     }
 
     private void loadData() {
@@ -223,12 +235,27 @@ public class ProductsPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Select a product first");
             return null;
         }
-        int modelRow = table.convertRowIndexToModel(row);
+        return getProductAtModelRow(table.convertRowIndexToModel(row));
+    }
+
+    private Product getProductAtModelRow(int modelRow) {
         String sku = (String) tableModel.getValueAt(modelRow, 2);
         try {
             return productService.search(sku).stream()
                 .filter(p -> sku.equals(p.getSku())).findFirst().orElse(null);
         } catch (Exception e) { return null; }
+    }
+
+    private List<Product> getSelectedProducts() {
+        int[] selectedRows = table.getSelectedRows();
+        if (selectedRows.length == 0) return java.util.Collections.emptyList();
+        java.util.List<Product> selectedProducts = new java.util.ArrayList<>();
+        java.util.Set<String> seenIds = new java.util.LinkedHashSet<>();
+        for (int row : selectedRows) {
+            Product product = getProductAtModelRow(table.convertRowIndexToModel(row));
+            if (product != null && seenIds.add(product.getId())) selectedProducts.add(product);
+        }
+        return selectedProducts;
     }
 
     private Icon productThumbnail(String imagePaths) {
@@ -240,19 +267,32 @@ public class ProductsPanel extends JPanel {
     }
 
     private void deleteSelected() {
-        Product p = getSelectedProduct();
-        if (p == null) return;
+        List<Product> selectedProducts = getSelectedProducts();
+        if (selectedProducts.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Select one or more products first");
+            return;
+        }
+        String prompt = selectedProducts.size() == 1
+            ? "Delete '" + selectedProducts.get(0).getName() + "'?"
+            : "Delete " + selectedProducts.size() + " selected products?";
         int r = JOptionPane.showConfirmDialog(this,
-            "Delete '" + p.getName() + "'?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+            prompt, "Confirm Delete", JOptionPane.YES_NO_OPTION);
         if (r != JOptionPane.YES_OPTION) return;
         new SwingWorker<Void, Void>() {
             @Override protected Void doInBackground() throws Exception {
-                productService.deleteProduct(p.getId(),
-                    AuthService.getInstance().getCurrentUser().getId());
+                String userId = AuthService.getInstance().getCurrentUser().getId();
+                for (Product product : selectedProducts) {
+                    productService.deleteProduct(product.getId(), userId);
+                }
                 return null;
             }
             @Override protected void done() {
-                try { get(); loadData(); }
+                try {
+                    get();
+                    loadData();
+                    JOptionPane.showMessageDialog(ProductsPanel.this,
+                        selectedProducts.size() + " product" + (selectedProducts.size() == 1 ? "" : "s") + " deleted.");
+                }
                 catch (Exception e) {
                     JOptionPane.showMessageDialog(ProductsPanel.this,
                         "Delete failed: " + e.getMessage());
@@ -553,8 +593,8 @@ public class ProductsPanel extends JPanel {
             Component c = super.getTableCellRendererComponent(t, value, selected, focused, row, col);
             if (!selected) {
                 try {
-                    int stock = Integer.parseInt(t.getValueAt(row, 7).toString());
-                    int min   = Integer.parseInt(t.getValueAt(row, 8).toString());
+                    int stock = Integer.parseInt(t.getValueAt(row, 8).toString());
+                    int min   = Integer.parseInt(t.getValueAt(row, 9).toString());
                     if (stock == 0)          c.setBackground(ZERO);
                     else if (stock <= min)   c.setBackground(LOW);
                     else                     c.setBackground(Color.WHITE);

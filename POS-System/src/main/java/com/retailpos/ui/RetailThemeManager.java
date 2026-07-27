@@ -10,9 +10,9 @@ public class RetailThemeManager {
     // Retail brand palette — light mode base
     public static Color PRIMARY    = new Color(37, 99, 235);   // #2563eb blue
     public static Color PRIMARY_DK = new Color(29, 78, 216);   // darker blue
-    public static Color ACCENT     = new Color(22, 163, 74);   // #16a34a green
-    public static Color DANGER     = new Color(220, 38,  38);  // red
-    public static Color WARNING    = new Color(202, 138,  4);  // amber
+    public static Color ACCENT     = new Color(16, 185, 129);  // #10b981 emerald
+    public static Color DANGER     = new Color(239, 68,  68);  // #ef4444 red
+    public static Color WARNING    = new Color(217, 119,  6);  // #d97706 amber
     public static Color NAVY       = new Color(15, 23, 42);    // header bg
     public static Color SURFACE    = new Color(248, 250, 252); // light bg
     public static Color CARD_BG    = Color.WHITE;
@@ -24,15 +24,15 @@ public class RetailThemeManager {
     // (softer, slightly desaturated accents; true near-black surfaces; layered card elevation)
     private static final Color DARK_PRIMARY   = new Color(96, 165, 250);  // #60a5fa lighter blue
     private static final Color DARK_PRIMARY_DK= new Color(59, 130, 246);
-    private static final Color DARK_ACCENT    = new Color(74, 222, 128);  // #4ade80 lighter green
+    private static final Color DARK_ACCENT    = new Color(52, 211, 153);  // #34d399 emerald
     private static final Color DARK_DANGER    = new Color(248, 113, 113); // #f87171 lighter red
     private static final Color DARK_WARNING   = new Color(250, 204, 21);  // #facc15 lighter amber
     private static final Color DARK_NAVY      = new Color(2,   6,  23);   // #020617
-    private static final Color DARK_SURFACE   = new Color(9,   12,  24);  // near-black bg
-    private static final Color DARK_CARD      = new Color(22,  27,  42);  // #161b2a slightly elevated
-    private static final Color DARK_FIELD_BG  = new Color(15,  20,  35);
+    private static final Color DARK_SURFACE   = new Color(15,  23,  42);  // #0f172a
+    private static final Color DARK_CARD      = new Color(30,  41,  59);  // #1e293b
+    private static final Color DARK_FIELD_BG  = new Color(17,  24,  39);  // #111827
     private static final Color DARK_HEADER_BG = new Color(2,   6,  23);
-    private static final Color DARK_TEXT      = new Color(226, 232, 240); // #e2e8f0
+    private static final Color DARK_TEXT      = new Color(241, 245, 249); // #f1f5f9
     private static final Color DARK_TEXT_MUTED= new Color(148, 163, 184); // #94a3b8
     private static final Color DARK_BORDER    = new Color(51,  65,  85);  // #334155
     private static final Color DARK_SELECTION_BG = new Color(30, 58, 95);
@@ -45,9 +45,9 @@ public class RetailThemeManager {
     // Light mode originals, kept so toggling back to light restores exact values
     private static final Color LIGHT_PRIMARY   = new Color(37, 99, 235);
     private static final Color LIGHT_PRIMARY_DK= new Color(29, 78, 216);
-    private static final Color LIGHT_ACCENT    = new Color(22, 163, 74);
-    private static final Color LIGHT_DANGER    = new Color(220, 38, 38);
-    private static final Color LIGHT_WARNING   = new Color(202, 138, 4);
+    private static final Color LIGHT_ACCENT    = new Color(16, 185, 129);
+    private static final Color LIGHT_DANGER    = new Color(239, 68, 68);
+    private static final Color LIGHT_WARNING   = new Color(217, 119, 6);
     private static final Color LIGHT_NAVY      = new Color(15, 23, 42);
     private static final Color LIGHT_SURFACE   = new Color(248, 250, 252);
     private static final Color LIGHT_CARD      = Color.WHITE;
@@ -129,8 +129,15 @@ public class RetailThemeManager {
     }
 
     private void applyUiDefaults() {
+        UIManager.put("Component.arc", 10);
+        UIManager.put("Button.arc", 10);
+        UIManager.put("TextComponent.arc", 10);
+        UIManager.put("ProgressBar.arc", 10);
+        UIManager.put("ScrollBar.thumbArc", 999);
+        UIManager.put("ScrollBar.width", 12);
         UIManager.put("Component.focusColor", PRIMARY);
         UIManager.put("TabbedPane.underlineColor", PRIMARY);
+        UIManager.put("TabbedPane.showTabSeparators", false);
         UIManager.put("Panel.background", SURFACE);
         UIManager.put("Viewport.background", SURFACE);
         UIManager.put("ScrollPane.background", SURFACE);
@@ -145,6 +152,16 @@ public class RetailThemeManager {
         UIManager.put("TextField.foreground", TEXT);
         UIManager.put("PasswordField.background", fieldBg());
         UIManager.put("PasswordField.foreground", TEXT);
+        UIManager.put("TextArea.background", fieldBg());
+        UIManager.put("TextArea.foreground", TEXT);
+        UIManager.put("ComboBox.background", fieldBg());
+        UIManager.put("ComboBox.foreground", TEXT);
+        UIManager.put("Spinner.background", fieldBg());
+        UIManager.put("Spinner.foreground", TEXT);
+        UIManager.put("ToolTip.background", CARD_BG);
+        UIManager.put("ToolTip.foreground", TEXT);
+        UIManager.put("ToolTip.border", BorderFactory.createLineBorder(BORDER));
+        UIManager.put("Separator.foreground", BORDER);
         UIManager.put("Label.foreground", TEXT);
     }
 
@@ -182,7 +199,7 @@ public class RetailThemeManager {
         } else if (component instanceof JTabbedPane tabbedPane) {
             tabbedPane.setBackground(SURFACE);
             tabbedPane.setForeground(TEXT);
-        } else if (component instanceof JLabel label && !Color.WHITE.equals(label.getForeground())) {
+        } else if (component instanceof JLabel label && isManagedLabelColor(label.getForeground())) {
             label.setForeground(label.getFont().isBold() ? TEXT : TEXT_MUTED);
         }
 
@@ -356,4 +373,13 @@ public class RetailThemeManager {
     private Color fieldBg() { return dark ? DARK_FIELD_BG : Color.WHITE; }
     private Color selectionBg() { return dark ? DARK_SELECTION_BG : LIGHT_SELECTION_BG; }
     private Color selectionFg() { return dark ? DARK_SELECTION_FG : LIGHT_SELECTION_FG; }
+
+    private boolean isManagedLabelColor(Color color) {
+        return color == null
+            || Color.BLACK.equals(color)
+            || LIGHT_TEXT.equals(color)
+            || LIGHT_TEXT_MUTED.equals(color)
+            || DARK_TEXT.equals(color)
+            || DARK_TEXT_MUTED.equals(color);
+    }
 }

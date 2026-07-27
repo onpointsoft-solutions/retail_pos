@@ -1,6 +1,6 @@
-# Retail POS REST API Backend
+# BizFlow POS REST API Backend
 
-PHP 8+ REST API for the Retail POS desktop sync system.  
+PHP 8+ REST API for the BizFlow POS desktop sync system.
 Zero composer dependencies — manual JWT HS256, PDO/MySQL.
 
 ---
@@ -46,6 +46,7 @@ Set these variables in your web server config (Apache VirtualHost or `.env` load
 | `DB_USER`   | `root`        | Database username          |
 | `DB_PASS`   | *(empty)*     | Database password          |
 | `JWT_SECRET`| *(insecure default)* | **Change this in production!** |
+| `REQUIRE_AUTH` | `true` | Require a valid JWT for sync endpoints |
 
 **Apache VirtualHost example:**
 ```apache
@@ -271,7 +272,7 @@ Standard CRUD. Passwords hashed with bcrypt cost 12.
 GET /api/health
 ```
 ```json
-{ "status": "ok", "app": "Retail POS API", "version": "2.0.0", "timestamp": "2024-..." }
+{ "status": "ok", "app": "BizFlow POS API", "version": "2.0.0", "timestamp": "2024-..." }
 ```
 
 ---
@@ -285,6 +286,43 @@ GET /api/health
 5. Backup uploads are restricted to `.db`, `.sqlite`, `.zip`, `.gz`, `.sql`, `.bak` extensions.
 6. CORS is wide-open (`*`) by default for desktop app compatibility — restrict in production.
 7. The `backups/` directory is outside the web root by default — adjust `BACKUP_DIR` if needed.
+
+---
+
+## BizFlow POS Licensing
+
+Licensing tables and the Starter, Business, and Enterprise plans are created
+automatically when a `/license/*` endpoint is first called. The standalone
+schema is also available at `sql/licensing.sql`.
+
+Public endpoints are `GET /license/plans` and `POST` requests to
+`/license/trial`, `/license/activate`, and `/license/validate`.
+
+The `/license/issue`, `/license/renew`, and `/license/revoke` endpoints require
+a signed-in backend administrator. From the cPanel terminal:
+
+```bash
+php tools/issue_license.php BUSINESS "Customer Shop" 12 5 owner@example.com 0712345678
+php tools/renew_license.php BIZF-XXXXX-XXXXX-XXXXX-XXXXX 12
+```
+
+### Multi-business isolation
+
+Each issued license creates a unique `business_id`. Activation returns a signed
+sync token containing that business identity, and all sync uploads, downloads,
+status counts, child records, settings, and product-image folders are restricted
+to it. Computers using the same license share data; computers using another
+license cannot read or overwrite that data.
+
+`TenantManager` migrates existing databases automatically. On the first
+activation of an existing installation, records without a `business_id` are
+claimed by that license. Back up the database first and activate the original
+business license before issuing licenses for additional businesses. See
+`sql/multi_tenant.sql` for deployment notes. The configured MySQL account needs
+`ALTER`, `CREATE`, and `INDEX` permissions during this one-time migration.
+
+License keys are stored only as SHA-256 hashes. Copy a newly issued key from
+the command output immediately.
 
 ---
 

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../helpers/Response.php';
 require_once __DIR__ . '/../helpers/JwtHelper.php';
 require_once __DIR__ . '/../helpers/Validator.php';
+require_once __DIR__ . '/../helpers/TenantManager.php';
 
 class AuthController
 {
@@ -14,6 +15,7 @@ class AuthController
     public function __construct()
     {
         $this->db = Database::getConnection();
+        TenantManager::ensureSchema($this->db);
     }
 
     public function login(array $body): never
@@ -27,15 +29,24 @@ class AuthController
         $username = trim($body['username']);
         $password = $body['password'];
 
-        $stmt = $this->db->prepare(
-            'SELECT id, username, password_hash, role, full_name, active, 
-                    failed_login_attempts, lockout_until, store_id
-             FROM users 
-             WHERE username = ? AND deleted_at IS NULL
-             LIMIT 1'
-        );
-        $stmt->execute([$username]);
-        $user = $stmt->fetch();
+        $businessId = trim((string)($body['business_id'] ?? ''));
+        $sql = 'SELECT id, username, password_hash, role, full_name, active,
+                       failed_login_attempts, lockout_until, business_id
+                FROM users
+                WHERE username = ? AND deleted_at IS NULL';
+        $parameters = [$username];
+        if ($businessId !== '') {
+            $sql .= ' AND business_id = ?';
+            $parameters[] = $businessId;
+        }
+        $sql .= ' LIMIT 2';
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($parameters);
+        $matches = $stmt->fetchAll();
+        if (count($matches) > 1 && $businessId === '') {
+            Response::error('Business ID is required for this username.', 422);
+        }
+        $user = $matches[0] ?? false;
 
         if (!$user) {
             Response::error('Invalid credentials', 401);
@@ -83,7 +94,7 @@ class AuthController
             'user_id'  => $user['id'],
             'username' => $user['username'],
             'role'     => $user['role'],
-            'store_id' => $user['store_id'] ?? null,
+            'business_id' => $user['business_id'] ?? null,
         ];
         $token = JwtHelper::encode($payload);
 
@@ -99,6 +110,7 @@ class AuthController
                 'username'  => $user['username'],
                 'full_name' => $user['full_name'],
                 'role'      => $user['role'],
+                'business_id' => $user['business_id'] ?? null,
             ],
         ]);
     }
@@ -128,7 +140,7 @@ class AuthController
 
         // Verify user still exists and is active
         $stmt = $this->db->prepare(
-            'SELECT id, username, role, full_name, active, store_id 
+            'SELECT id, username, role, full_name, active, business_id
              FROM users WHERE id = ? AND active = 1 AND deleted_at IS NULL LIMIT 1'
         );
         $stmt->execute([$payload['user_id']]);
@@ -142,7 +154,7 @@ class AuthController
             'user_id'  => $user['id'],
             'username' => $user['username'],
             'role'     => $user['role'],
-            'store_id' => $user['store_id'] ?? null,
+            'business_id' => $user['business_id'] ?? null,
         ];
         $newToken = JwtHelper::encode($newPayload);
 

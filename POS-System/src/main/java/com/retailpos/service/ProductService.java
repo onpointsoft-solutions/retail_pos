@@ -100,6 +100,11 @@ public class ProductService {
         try { return repo.findById(id); } catch (Exception e) { return Optional.empty(); }
     }
 
+    public Optional<Product> findBySku(String sku) {
+        if (sku == null || sku.isBlank()) return Optional.empty();
+        try { return repo.findBySku(sku.trim()); } catch (Exception e) { return Optional.empty(); }
+    }
+
     public void saveProduct(Product p, String userId) throws Exception {
         if (p.getSku() == null || p.getSku().isBlank()) p.setSku(generateSku(p.getName()));
         validateProduct(p);

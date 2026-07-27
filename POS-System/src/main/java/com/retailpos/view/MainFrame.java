@@ -3,6 +3,7 @@ package com.retailpos.view;
 import com.retailpos.model.AppSettings;
 import com.retailpos.repository.SettingsRepository;
 import com.retailpos.service.AuthService;
+import com.retailpos.service.LicenseService;
 import com.retailpos.sync.SyncService;
 import com.retailpos.ui.Icons;
 import com.retailpos.ui.RetailThemeManager;
@@ -22,17 +23,19 @@ public class MainFrame extends JFrame {
     private JLabel statusTimeLabel;
     private JLabel statusSyncLabel;
     private JLabel statusOnlineLabel;
+    private JLabel statusLicenseLabel;
     private JTabbedPane tabs;
     private SalesPanel salesPanel;
     private AppSettings settings;
 
     public MainFrame() {
-        super("Victorious Shop POS");
+        super("BizFlow POS");
         loadSettings();
         buildUI();
         com.retailpos.service.MpesaUdpBridge.getInstance().start();
         startSyncService();
         startStatusTimer();
+        startLicenseEnforcementTimer();
         startPanelRefreshTimer();
         applyTheme();
     }
@@ -168,14 +171,79 @@ public class MainFrame extends JFrame {
         statusTimeLabel.setForeground(new Color(148, 163, 184));
         updateSessionTime();
 
-        left.add(statusUserLabel); left.add(statusTimeLabel);
+        statusLicenseLabel = new JLabel();
+        statusLicenseLabel.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        statusLicenseLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        statusLicenseLabel.setToolTipText("Click to manage your BizFlow POS license");
+        statusLicenseLabel.addMouseListener(new MouseAdapter() {
+            @Override public void mouseClicked(MouseEvent event) {
+                LicenseService.LicenseSnapshot snapshot =
+                    LicenseService.getInstance().checkAccess();
+                LicenseActivationDialog dialog =
+                    new LicenseActivationDialog(MainFrame.this, snapshot, true);
+                dialog.setVisible(true);
+                updateLicenseStatus();
+            }
+        });
+        updateLicenseStatus();
+
+        left.add(statusUserLabel);
+        left.add(statusTimeLabel);
+        left.add(statusLicenseLabel);
         bar.add(left, BorderLayout.WEST);
 
-        JLabel versionLabel = new JLabel("Victorious Shop POS  |  Offline-ready");
+        JLabel versionLabel = new JLabel("BizFlow POS v2.0  |  Offline-ready");
         versionLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
         versionLabel.setForeground(new Color(71, 85, 105));
         bar.add(versionLabel, BorderLayout.EAST);
         return bar;
+    }
+
+    private void updateLicenseStatus() {
+        LicenseService.LicenseSnapshot license = LicenseService.getInstance().checkAccess();
+        applyLicenseSnapshot(license);
+    }
+
+    private void applyLicenseSnapshot(LicenseService.LicenseSnapshot license) {
+        statusLicenseLabel.setText(license.getDisplayText());
+        statusLicenseLabel.setForeground(switch (license.getStatus()) {
+            case ACTIVE -> RetailThemeManager.ACCENT;
+            case TRIAL, GRACE -> RetailThemeManager.WARNING;
+            case EXPIRED, INVALID -> RetailThemeManager.DANGER;
+        });
+    }
+
+    private void startLicenseEnforcementTimer() {
+        Timer timer = new Timer(5 * 60 * 1000, event ->
+            new SwingWorker<LicenseService.LicenseSnapshot, Void>() {
+                @Override protected LicenseService.LicenseSnapshot doInBackground() {
+                    return LicenseService.getInstance().checkAccess();
+                }
+
+                @Override protected void done() {
+                    try {
+                        LicenseService.LicenseSnapshot snapshot = get();
+                        applyLicenseSnapshot(snapshot);
+                        if (!snapshot.isAllowed()) {
+                            LicenseActivationDialog dialog =
+                                new LicenseActivationDialog(MainFrame.this, snapshot, false);
+                            dialog.setVisible(true);
+                            if (!dialog.isActivated()) {
+                                SyncService.getInstance().stop();
+                                com.retailpos.util.DatabaseManager.close();
+                                dispose();
+                                System.exit(0);
+                            }
+                            updateLicenseStatus();
+                        }
+                    } catch (Exception ignored) {
+                        // Cached paid-license grace and local trial rules are handled by LicenseService.
+                    }
+                }
+            }.execute()
+        );
+        timer.setCoalesce(true);
+        timer.start();
     }
 
     private void registerGlobalShortcuts() {
@@ -201,6 +269,10 @@ public class MainFrame extends JFrame {
                     statusOnlineLabel.setIcon(Icons.get("online", 12));
                     statusOnlineLabel.setText("Online");
                     statusOnlineLabel.setForeground(new Color(74, 222, 128));
+                    // Refresh all panels when sync completes with new data
+                    if (message.contains("down:") || message.contains("up:")) {
+                        refreshAllPanels();
+                    }
                 }
                 case SYNCING -> {
                     statusSyncLabel.setIcon(Icons.get("syncing", 12));
@@ -229,9 +301,8 @@ public class MainFrame extends JFrame {
     }
 
     private void startPanelRefreshTimer() {
-        Timer refreshTimer = new Timer(5000, event -> refreshVisiblePanel());
-        refreshTimer.setCoalesce(true);
-        refreshTimer.start();
+        // Panel refresh now triggered by sync events when data changes
+        // Removed 5-second auto-refresh to reduce unnecessary updates
     }
 
     private void refreshVisiblePanel() {
@@ -247,6 +318,25 @@ public class MainFrame extends JFrame {
                 // Try the next conventional panel refresh method.
             } catch (Exception ignored) {
                 return;
+            }
+        }
+    }
+
+    private void refreshAllPanels() {
+        for (int i = 0; i < tabs.getTabCount(); i++) {
+            Component panel = tabs.getComponentAt(i);
+            if (panel == null) continue;
+            for (String methodName : new String[] {"loadData", "loadAll", "doSearch", "loadCategoriesAndProducts", "loadSettings", "generateReport"}) {
+                try {
+                    java.lang.reflect.Method method = panel.getClass().getDeclaredMethod(methodName);
+                    method.setAccessible(true);
+                    method.invoke(panel);
+                    break;
+                } catch (NoSuchMethodException ignored) {
+                    // Try the next conventional panel refresh method.
+                } catch (Exception ignored) {
+                    break;
+                }
             }
         }
     }

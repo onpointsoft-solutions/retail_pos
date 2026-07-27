@@ -1,7 +1,7 @@
 package com.retailpos.model;
 
 public class AppSettings {
-    private String storeName = "Retail Shop";
+    private String storeName = "Victorious Shop";
     private String storeAddress = "";
     private String storePhone = "";
     private String storeFooter = "Thank you for shopping with us!";
@@ -10,7 +10,7 @@ public class AppSettings {
     private int paperWidth = 80; // 58 or 80
     private double taxRate = 16.0;
     private double loyaltyEarningRate = 1.0; // points per KES 1 spent
-    private String syncApiUrl = "http://localhost/retail-pos-api/api/";
+    private String syncApiUrl = "https://pos.victoriousgeneralshop.com/api/";
     private String syncApiToken = "";
     private String syncApiUsername = "admin";
     private String syncApiPassword = "";
@@ -21,6 +21,7 @@ public class AppSettings {
     private String backupTime = "23:00";
     private boolean autoPrintReceipt = true;
     private boolean setupComplete = false;
+    private String lastSuccessfulSync = "";
 
     public AppSettings() {}
 
@@ -64,5 +65,7 @@ public class AppSettings {
     public void setAutoPrintReceipt(boolean autoPrintReceipt) { this.autoPrintReceipt = autoPrintReceipt; }
     public boolean isSetupComplete() { return setupComplete; }
     public void setSetupComplete(boolean setupComplete) { this.setupComplete = setupComplete; }
+    public String getLastSuccessfulSync() { return lastSuccessfulSync; }
+    public void setLastSuccessfulSync(String lastSuccessfulSync) { this.lastSuccessfulSync = lastSuccessfulSync; }
     public int getCharsPerLine() { return paperWidth == 58 ? 32 : 48; }
 }

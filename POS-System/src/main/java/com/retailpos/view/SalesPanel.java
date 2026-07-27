@@ -100,6 +100,27 @@ public class SalesPanel extends JPanel {
         leftTop.setOpaque(false);
         leftTop.add(searchBar, BorderLayout.NORTH);
         leftTop.add(catScroll, BorderLayout.CENTER);
+        
+        // Sort control
+        JPanel sortPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        sortPanel.setOpaque(false);
+        JLabel sortLabel = new JLabel("Sort:");
+        sortLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        sortLabel.setForeground(RetailThemeManager.TEXT_MUTED);
+        String[] sortOptions = {"Name", "Price (Low-High)", "Price (High-Low)", "Stock"};
+        JComboBox<String> sortCombo = new JComboBox<>(sortOptions);
+        sortCombo.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        sortCombo.addActionListener(e -> sortProductGrid((String) sortCombo.getSelectedItem()));
+        sortPanel.add(sortLabel);
+        sortPanel.add(sortCombo);
+        
+        JButton clearFiltersBtn = RetailThemeManager.secondaryButton("Clear");
+        clearFiltersBtn.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        clearFiltersBtn.addActionListener(e -> clearFilters());
+        sortPanel.add(clearFiltersBtn);
+        
+        leftTop.add(sortPanel, BorderLayout.SOUTH);
+        
         left.add(leftTop, BorderLayout.NORTH);
         left.add(productGridScroll, BorderLayout.CENTER);
 
@@ -847,5 +868,52 @@ public class SalesPanel extends JPanel {
     public void focusSearch() {
         searchField.requestFocus();
         searchField.selectAll();
+    }
+
+    private void sortProductGrid(String sortBy) {
+        List<Product> filtered = activeCategoryId == null ? allProducts
+            : allProducts.stream()
+                .filter(p -> activeCategoryId.equals(p.getCategoryId()))
+                .collect(java.util.stream.Collectors.toList());
+
+        switch (sortBy) {
+            case "Name":
+                filtered.sort(Comparator.comparing(Product::getName, String.CASE_INSENSITIVE_ORDER));
+                break;
+            case "Price (Low-High)":
+                filtered.sort(Comparator.comparing(Product::getSellingPrice));
+                break;
+            case "Price (High-Low)":
+                filtered.sort(Comparator.comparing(Product::getSellingPrice).reversed());
+                break;
+            case "Stock":
+                filtered.sort(Comparator.comparing(Product::getCurrentStock).reversed());
+                break;
+        }
+        renderProductGrid(filtered);
+    }
+
+    private void clearFilters() {
+        if (searchDebounce != null) searchDebounce.stop();
+        searchField.setText("");
+        activeCategoryId = null;
+        // Reset category button styles
+        for (Component comp : categoryPanel.getComponents()) {
+            if (comp instanceof JButton) {
+                comp.setBackground(RetailThemeManager.SURFACE);
+                comp.setForeground(RetailThemeManager.TEXT);
+            }
+        }
+        // Highlight "All" button
+        if (categoryPanel.getComponentCount() > 0) {
+            Component first = categoryPanel.getComponent(0);
+            if (first instanceof JButton) {
+                first.setBackground(RetailThemeManager.PRIMARY);
+                first.setForeground(Color.WHITE);
+            }
+        }
+        renderProductGrid(allProducts);
+        stockWarningLabel.setForeground(RetailThemeManager.TEXT_MUTED);
+        stockWarningLabel.setText(allProducts.size() + " products available");
     }
 }

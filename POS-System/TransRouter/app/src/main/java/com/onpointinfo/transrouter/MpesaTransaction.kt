@@ -5,5 +5,6 @@ data class MpesaTransaction(
     val customerName: String,
     val amount: String,
     val receivedAt: Long,
-    val rawMessage: String
+    val rawMessage: String,
+    val forwarded: Boolean = false
 )

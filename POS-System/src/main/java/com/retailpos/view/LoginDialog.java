@@ -16,7 +16,7 @@ public class LoginDialog extends JDialog {
     private JButton loginButton;
 
     public LoginDialog(Frame parent) {
-        super(parent, "Victorious Shop POS — Sign In", true);
+        super(parent, "BizFlow POS — Sign In", true);
         setSize(900, 560);
         setLocationRelativeTo(parent);
         setResizable(false);
@@ -41,7 +41,7 @@ public class LoginDialog extends JDialog {
         brand.add(logo, bc);
 
         bc.gridy = 1; bc.insets = new Insets(12, 0, 4, 0);
-        JLabel title = new JLabel("VICTORIOUS SHOP POS");
+        JLabel title = new JLabel("BizFlow POS");
         title.setFont(new Font("Segoe UI", Font.BOLD, 26));
         title.setForeground(Color.WHITE);
         brand.add(title, bc);

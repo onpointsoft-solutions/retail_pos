@@ -60,6 +60,7 @@ public class DatabaseManager {
             createPurchaseOrderItemsTable(s);
             createSuspendedCartsTable(s);
             createSuspendedCartItemsTable(s);
+            createMpesaTransactionsTable(s);
             createAuditLogsTable(s);
             createAppSettingsTable(s);
             insertDefaultAdminIfEmpty(c);
@@ -99,6 +100,15 @@ public class DatabaseManager {
             "failed_login_attempts INTEGER DEFAULT 0, lockout_until TEXT, " +
             "sync_status TEXT DEFAULT 'PENDING', created_at TEXT, updated_at TEXT)");
         s.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)");
+    }
+
+    private static void createMpesaTransactionsTable(Statement s) throws SQLException {
+        s.execute("CREATE TABLE IF NOT EXISTS mpesa_transactions (" +
+            "id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, customer_name TEXT, amount REAL DEFAULT 0, " +
+            "received_at INTEGER NOT NULL, sync_status TEXT DEFAULT 'PENDING', " +
+            "created_at TEXT, updated_at TEXT)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_mpesa_received_at ON mpesa_transactions(received_at)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_mpesa_sync_status ON mpesa_transactions(sync_status)");
     }
 
     private static void createProductsTable(Statement s) throws SQLException {
@@ -277,9 +287,9 @@ public class DatabaseManager {
                     {"store_name","Retail Shop"}, {"store_address",""}, {"store_phone",""},
                     {"store_footer","Thank you for shopping with us!"},{"logo_path",""},
                     {"printer_name",""},{"paper_width","80"},{"tax_rate","16.0"},
-                    {"loyalty_earning_rate","1.0"},{"sync_api_url","http://localhost/retail-pos-api/api/"},
+                    {"loyalty_earning_rate","1.0"},{"sync_api_url","https://pos.victoriousgeneralshop.com/api/"},
                     {"sync_api_token",""},{"sync_api_username","admin"},{"sync_api_password",""},{"auto_sync","true"},{"dark_mode","false"},
-                    {"backup_path","backups"},{"backup_time","23:00"},{"auto_print_receipt","true"}
+                    {"backup_path","backups"},{"backup_time","23:00"},{"auto_print_receipt","true"},{"last_successful_sync",""}
                 };
                 for (String[] kv : defaults) {
                     try (PreparedStatement ins = c.prepareStatement(
@@ -293,3 +303,4 @@ public class DatabaseManager {
         }
     }
 }
+

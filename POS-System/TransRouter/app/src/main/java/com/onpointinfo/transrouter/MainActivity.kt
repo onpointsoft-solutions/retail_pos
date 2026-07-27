@@ -17,11 +17,15 @@ import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.*
 import java.net.InetAddress
+import android.provider.Telephony
+import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class MainActivity : AppCompatActivity() {
     private lateinit var transactionList: LinearLayout
     private lateinit var transactionStatus: TextView
     private lateinit var posHostField: EditText
+    private lateinit var transactionsSection: View
+    private lateinit var settingsSection: View
     
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { 
         refreshTransactions() 
@@ -34,8 +38,28 @@ class MainActivity : AppCompatActivity() {
         transactionList = findViewById(R.id.transactionList)
         transactionStatus = findViewById(R.id.transactionStatus)
         posHostField = findViewById(R.id.posHostField)
+        transactionsSection = findViewById(R.id.transactionsSection)
+        settingsSection = findViewById(R.id.settingsSection)
         
+        val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNavigation)
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_transactions -> {
+                    transactionsSection.visibility = View.VISIBLE
+                    settingsSection.visibility = View.GONE
+                    true
+                }
+                R.id.nav_settings -> {
+                    transactionsSection.visibility = View.GONE
+                    settingsSection.visibility = View.VISIBLE
+                    true
+                }
+                else -> false
+            }
+        }
+
         val grantSmsButton = findViewById<Button>(R.id.grantSmsButton)
+        val setDefaultSmsButton = findViewById<Button>(R.id.setDefaultSmsButton)
         val savePosButton = findViewById<Button>(R.id.savePosButton)
 
         posHostField.setText(getSharedPreferences("transrouter", MODE_PRIVATE).getString("pos_host", ""))
@@ -44,22 +68,33 @@ class MainActivity : AppCompatActivity() {
             requestSmsPermission()
             requestIgnoreBatteryOptimizations()
         }
+
+        setDefaultSmsButton.setOnClickListener {
+            val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
+            intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
+            startActivity(intent)
+        }
+
         savePosButton.setOnClickListener {
             val host = posHostField.text.toString().trim()
             val address = try { InetAddress.getByName(host) } catch (_: Exception) { null }
             if (address == null || !address.isSiteLocalAddress) {
-                posHostField.error = "Enter the POS private LAN IP shown in Victorious Shop POS"
+                posHostField.error = "Enter the private LAN IP shown in BizFlow POS"
                 return@setOnClickListener
             }
             getSharedPreferences("transrouter", MODE_PRIVATE).edit().putString("pos_host", host).apply()
+            UdpTransactionPublisher.retryPending(applicationContext)
+            ForwardRetryReceiver.schedule(applicationContext)
             Toast.makeText(this, "Configuration saved: $host", Toast.LENGTH_SHORT).show()
         }
 
+        ForwardRetryReceiver.schedule(applicationContext)
         refreshTransactions()
     }
 
     override fun onResume() {
         super.onResume()
+        UdpTransactionPublisher.retryPending(applicationContext)
         refreshTransactions()
     }
 
@@ -84,7 +119,7 @@ class MainActivity : AppCompatActivity() {
                 startActivity(intent)
             } catch (e: Exception) {
                 // Fallback for devices that don't support the direct intent
-                Toast.makeText(this, "Please disable battery optimization for TransRouter manually", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Please disable battery optimization for BizFlow Bridge manually", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -110,6 +145,19 @@ class MainActivity : AppCompatActivity() {
                 itemView.findViewById<TextView>(R.id.transactionAmount).text = "KES ${transaction.amount}"
                 itemView.findViewById<TextView>(R.id.customerName).text = transaction.customerName
                 itemView.findViewById<TextView>(R.id.transactionTime).text = dateFormat.format(Date(transaction.receivedAt))
+                itemView.findViewById<TextView>(R.id.forwardingStatus).apply {
+                    text = if (transaction.forwarded) "Delivered to POS" else "Pending delivery — tap to retry"
+                    setTextColor(ContextCompat.getColor(
+                        this@MainActivity,
+                        if (transaction.forwarded) R.color.success else R.color.warning
+                    ))
+                }
+                itemView.setOnClickListener {
+                    if (!transaction.forwarded) {
+                        UdpTransactionPublisher.publish(applicationContext, transaction)
+                        Toast.makeText(this, "Retrying ${transaction.code}", Toast.LENGTH_SHORT).show()
+                    }
+                }
                 
                 transactionList.addView(itemView)
             }

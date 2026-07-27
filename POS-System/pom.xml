@@ -10,7 +10,7 @@
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Retail POS System</name>
+    <name>BizFlow POS System</name>
     <description>Desktop Point of Sale system for Retail / Supermarket</description>
 
     <properties>
@@ -124,7 +124,7 @@
     </dependencies>
 
     <build>
-        <finalName>RetailPOS</finalName>
+        <finalName>BizFlowPOS</finalName>
 
         <plugins>
             <plugin>

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 public class ProductRepository {
+    private static final String NOT_DELETED = "sync_status!='DELETED' AND deleted_at IS NULL";
 
     private Product map(ResultSet r) throws SQLException {
         Product p = new Product();
@@ -101,7 +102,7 @@ public class ProductRepository {
     public Optional<Product> findByBarcode(String barcode) throws SQLException {
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                "SELECT * FROM products WHERE barcode=? AND sync_status!='DELETED' AND status='active' LIMIT 1")) {
+                "SELECT * FROM products WHERE barcode=? AND " + NOT_DELETED + " AND status='active' LIMIT 1")) {
             ps.setString(1, barcode);
             ResultSet r = ps.executeQuery();
             return r.next() ? Optional.of(map(r)) : Optional.empty();
@@ -111,7 +112,7 @@ public class ProductRepository {
     public Optional<Product> findByQrCode(String qrCode) throws SQLException {
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                "SELECT * FROM products WHERE qr_code=? AND sync_status!='DELETED' AND status='active' LIMIT 1")) {
+                "SELECT * FROM products WHERE qr_code=? AND " + NOT_DELETED + " AND status='active' LIMIT 1")) {
             ps.setString(1, qrCode);
             ResultSet r = ps.executeQuery();
             return r.next() ? Optional.of(map(r)) : Optional.empty();
@@ -121,7 +122,7 @@ public class ProductRepository {
     public Optional<Product> findBySku(String sku) throws SQLException {
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                "SELECT * FROM products WHERE sku=? AND sync_status!='DELETED' AND status='active' LIMIT 1")) {
+                "SELECT * FROM products WHERE sku=? AND " + NOT_DELETED + " AND status='active' LIMIT 1")) {
             ps.setString(1, sku);
             ResultSet r = ps.executeQuery();
             return r.next() ? Optional.of(map(r)) : Optional.empty();
@@ -130,7 +131,7 @@ public class ProductRepository {
 
     public List<Product> search(String query, int limit, int offset) throws SQLException {
         String q = "%" + query.toLowerCase() + "%";
-        String sql = "SELECT * FROM products WHERE sync_status!='DELETED' AND status='active' " +
+        String sql = "SELECT * FROM products WHERE " + NOT_DELETED + " AND status='active' " +
             "AND (lower(name) LIKE ? OR barcode LIKE ? OR sku LIKE ?) ORDER BY name LIMIT ? OFFSET ?";
         List<Product> list = new ArrayList<>();
         try (Connection c = DatabaseManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
@@ -144,7 +145,7 @@ public class ProductRepository {
 
     public List<Product> findAll(int limit, int offset) throws SQLException {
         List<Product> list = new ArrayList<>();
-        String sql = "SELECT * FROM products WHERE sync_status!='DELETED' ORDER BY name LIMIT ? OFFSET ?";
+        String sql = "SELECT * FROM products WHERE " + NOT_DELETED + " ORDER BY name LIMIT ? OFFSET ?";
         try (Connection c = DatabaseManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, limit); ps.setInt(2, offset);
             ResultSet r = ps.executeQuery();
@@ -157,7 +158,7 @@ public class ProductRepository {
         List<Product> list = new ArrayList<>();
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                "SELECT * FROM products WHERE status='active' AND sync_status!='DELETED' ORDER BY name")) {
+                "SELECT * FROM products WHERE status='active' AND " + NOT_DELETED + " ORDER BY name")) {
             ResultSet r = ps.executeQuery();
             while (r.next()) list.add(map(r));
         }
@@ -166,7 +167,7 @@ public class ProductRepository {
 
     public List<Product> findByCategoryId(String categoryId, int limit, int offset) throws SQLException {
         List<Product> list = new ArrayList<>();
-        String sql = "SELECT * FROM products WHERE category_id=? AND status='active' AND sync_status!='DELETED' " +
+        String sql = "SELECT * FROM products WHERE category_id=? AND status='active' AND " + NOT_DELETED + " " +
             "ORDER BY name LIMIT ? OFFSET ?";
         try (Connection c = DatabaseManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, categoryId); ps.setInt(2, limit); ps.setInt(3, offset);
@@ -180,7 +181,7 @@ public class ProductRepository {
         List<Product> list = new ArrayList<>();
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                "SELECT * FROM products WHERE status='active' AND sync_status!='DELETED' " +
+                "SELECT * FROM products WHERE status='active' AND " + NOT_DELETED + " " +
                 "AND current_stock <= minimum_stock ORDER BY current_stock ASC")) {
             ResultSet r = ps.executeQuery();
             while (r.next()) list.add(map(r));
@@ -211,7 +212,7 @@ public class ProductRepository {
     public int countActive() throws SQLException {
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                "SELECT COUNT(*) FROM products WHERE status='active' AND sync_status!='DELETED'")) {
+                "SELECT COUNT(*) FROM products WHERE status='active' AND " + NOT_DELETED)) {
             ResultSet r = ps.executeQuery();
             return r.next() ? r.getInt(1) : 0;
         }
@@ -221,7 +222,7 @@ public class ProductRepository {
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(
                 "SELECT COALESCE(SUM(buying_price * current_stock),0) FROM products " +
-                "WHERE status='active' AND sync_status!='DELETED'")) {
+                "WHERE status='active' AND " + NOT_DELETED)) {
             ResultSet r = ps.executeQuery();
             return r.next() ? r.getDouble(1) : 0;
         }

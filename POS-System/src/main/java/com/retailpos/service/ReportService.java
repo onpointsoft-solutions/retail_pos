@@ -189,7 +189,7 @@ public class ReportService {
         String sql = "SELECT p.name, p.sku, p.buying_price, p.selling_price, p.current_stock, " +
             "(p.buying_price * p.current_stock) as cost_value, " +
             "(p.selling_price * p.current_stock) as sell_value FROM products " +
-            "WHERE status='active' AND sync_status!='DELETED' ORDER BY cost_value DESC";
+            "WHERE status='active' AND sync_status!='DELETED' AND deleted_at IS NULL ORDER BY cost_value DESC";
         double totalCost = 0, totalSell = 0;
         try (Connection c = DatabaseManager.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {

@@ -6,6 +6,11 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 header('Content-Type: application/json; charset=utf-8');
 
+// Enable gzip compression for responses
+if (isset($_SERVER['HTTP_ACCEPT_ENCODING']) && strpos($_SERVER['HTTP_ACCEPT_ENCODING'], 'gzip') !== false) {
+    ob_start('ob_gzhandler');
+}
+
 // Catch fatal errors and return them as JSON
 register_shutdown_function(function () {
     $err = error_get_last();
@@ -112,6 +117,15 @@ $routes = [
     ['PATCH',  '#^/users/(?P<id>[^/]+)$#',             'UserController',          'update',              false],
     ['DELETE', '#^/users/(?P<id>[^/]+)$#',             'UserController',          'destroy',             false],
 
+    // Licensing
+    ['GET',    '#^/license/plans$#',                   'LicenseController',       'plans',               true],
+    ['POST',   '#^/license/trial$#',                   'LicenseController',       'trial',               true],
+    ['POST',   '#^/license/activate$#',                'LicenseController',       'activate',            true],
+    ['POST',   '#^/license/validate$#',                'LicenseController',       'validateLicense',     true],
+    ['POST',   '#^/license/issue$#',                   'LicenseController',       'issue',               false],
+    ['POST',   '#^/license/renew$#',                   'LicenseController',       'renew',               false],
+    ['POST',   '#^/license/revoke$#',                  'LicenseController',       'revoke',              false],
+
     // ── Sync ─────────────────────────────────────────────────────────────────
     ['POST',   '#^/sync/upload$#',                     'SyncController',          'upload',              false],
     ['GET',    '#^/sync/download/(?P<entity>[^/]+)$#', 'SyncController',          'download',            false],
@@ -170,6 +184,15 @@ foreach ($routes as [$routeMethod, $pattern, $controllerClass, $action, $isPubli
     $payload = [];
     if (!$isPublic) {
         $payload = AuthMiddleware::handle();
+        $tenantBound = trim((string)($payload['business_id'] ?? '')) !== '';
+        $licenseAdminRoute = $controllerClass === 'LicenseController'
+            && strtoupper((string)($payload['role'] ?? '')) === 'ADMIN';
+        if ($tenantBound && $controllerClass !== 'SyncController' && !$licenseAdminRoute) {
+            Response::error(
+                'Licensed business tokens may only access tenant-safe synchronization routes.',
+                403
+            );
+        }
     }
 
     // ── Load and dispatch controller ─────────────────────────────────────────

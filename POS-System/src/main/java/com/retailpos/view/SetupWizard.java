@@ -35,7 +35,7 @@ public class SetupWizard extends JDialog {
     private final Border defaultFieldBorder;
 
     public SetupWizard(Frame parent) {
-        super(parent, "Welcome to Retail POS", true);
+        super(parent, "Welcome to BizFlow POS", true);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         setMinimumSize(new Dimension(720, 760));
         setSize(780, 860);
@@ -44,7 +44,7 @@ public class SetupWizard extends JDialog {
         addWindowListener(new WindowAdapter() {
             @Override public void windowClosing(WindowEvent e) {
                 JOptionPane.showMessageDialog(SetupWizard.this,
-                    "Setup must be completed before you can use Retail POS.",
+                    "Setup must be completed before you can use BizFlow POS.",
                     "Setup required", JOptionPane.INFORMATION_MESSAGE);
             }
         });

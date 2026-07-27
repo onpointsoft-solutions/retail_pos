@@ -83,6 +83,10 @@
                     Contact
                     <span class="absolute bottom-0 left-0 w-0 h-0.5 bg-primary-gold transition-all duration-300 group-hover:w-full"></span>
                 </a>
+                <a href="licensing.php" class="font-body font-semibold text-accent-violet hover:text-primary-gold transition-colors duration-200 relative group">
+                    BizFlow POS
+                    <span class="absolute bottom-0 left-0 w-0 h-0.5 bg-primary-gold transition-all duration-300 group-hover:w-full"></span>
+                </a>
             </div>
             
             <!-- Right Side Icons -->
@@ -125,6 +129,7 @@
                 <a href="shop.php" class="font-body font-medium text-charcoal hover:text-primary-gold py-2" style="min-height: 44px;">Shop</a>
                 <a href="about.php" class="font-body font-medium text-charcoal hover:text-primary-gold py-2" style="min-height: 44px;">About</a>
                 <a href="contact.php" class="font-body font-medium text-charcoal hover:text-primary-gold py-2" style="min-height: 44px;">Contact</a>
+                <a href="licensing.php" class="font-body font-semibold text-accent-violet hover:text-primary-gold py-2" style="min-height: 44px;">BizFlow POS Licensing</a>
             </div>
         </div>
     </nav>

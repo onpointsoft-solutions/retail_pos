@@ -7,7 +7,9 @@ import android.provider.Telephony
 
 class MpesaSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        val action = intent.action
+        if (action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION &&
+            action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
         
         val pendingResult = goAsync()
         Thread {
@@ -24,6 +26,7 @@ class MpesaSmsReceiver : BroadcastReceiver() {
                     val store = TransactionStore(context.applicationContext)
                     if (store.add(transaction)) {
                         UdpTransactionPublisher.publish(context.applicationContext, transaction)
+                        ForwardRetryReceiver.schedule(context.applicationContext)
                     }
                 } else {
                     // Optional: log or handle non-matching messages

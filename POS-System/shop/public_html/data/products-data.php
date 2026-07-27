@@ -26,6 +26,8 @@ function fetchProductsFromDatabase() {
     
     $products = [];
     foreach ($dbProducts as $product) {
+        $productImages = shopProductImageUrls($product['image_path'] ?? null);
+
         // Generate slug from SKU or name
         $slug = !empty($product['sku']) ? strtolower(preg_replace('/[^a-zA-Z0-9-]/', '-', $product['sku'])) 
                 : strtolower(preg_replace('/[^a-zA-Z0-9-]/', '-', $product['name']));
@@ -45,7 +47,8 @@ function fetchProductsFromDatabase() {
             'unit' => $product['unit'] ?? 'pcs',
             'stock' => (int) $product['current_stock'],
             'description' => $product['description'] ?? '',
-            'image' => !empty($product['image_path']) ? '/' . $product['image_path'] : '/assets/product-images/SampleProduct.png',
+            'image' => $productImages[0],
+            'images' => $productImages,
             'featured' => $product['status'] === 'active',
             'rating' => 4.5, // Default rating since not in database
             'review_count' => 0, // Default since not in database

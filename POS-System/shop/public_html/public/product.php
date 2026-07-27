@@ -26,7 +26,7 @@ $savings = $product['compare_price'] ? $product['compare_price'] - $product['pri
     quantity: 1, 
     activeTab: 'description',
     wishlist: false,
-    mainImage: '<?php echo htmlspecialchars($product['image']); ?>',
+    mainImage: <?php echo json_encode($product['image'], JSON_HEX_APOS | JSON_HEX_QUOT); ?>,
     incrementQty() { 
         if (this.quantity < <?php echo $product['stock']; ?>) this.quantity++ 
     },
@@ -72,7 +72,8 @@ $savings = $product['compare_price'] ? $product['compare_price'] - $product['pri
                     <div class="aspect-square">
                         <img :src="mainImage" 
                              alt="<?php echo htmlspecialchars($product['name']); ?>" 
-                             class="w-full h-full object-cover">
+                             class="w-full h-full object-cover"
+                             onerror="this.src='/assets/product-images/SampleProduct.png'">
                     </div>
                     
                     <!-- Out of Stock Badge -->
@@ -85,18 +86,18 @@ $savings = $product['compare_price'] ? $product['compare_price'] - $product['pri
                 
                 <!-- Thumbnail Row -->
                 <div class="grid grid-cols-4 gap-3">
-                    <?php for ($i = 0; $i < 4; $i++): ?>
-                        <button @click="mainImage = '<?php echo htmlspecialchars($product['image']); ?>'" 
+                    <?php foreach ($product['images'] as $image): ?>
+                        <button @click="mainImage = <?php echo htmlspecialchars(json_encode($image), ENT_QUOTES, 'UTF-8'); ?>"
                                 class="bg-neutral-white rounded-lg overflow-hidden border-2 hover:border-primary-gold transition-colors"
-                                :class="{ 'border-primary-gold': mainImage === '<?php echo htmlspecialchars($product['image']); ?>' }">
+                                :class="{ 'border-primary-gold': mainImage === <?php echo htmlspecialchars(json_encode($image), ENT_QUOTES, 'UTF-8'); ?> }">
                             <div class="aspect-square">
-                                <img src="<?php echo htmlspecialchars($product['image']); ?>" 
+                                <img src="<?php echo htmlspecialchars($image); ?>"
                                      alt="<?php echo htmlspecialchars($product['name']); ?>" 
                                      class="w-full h-full object-cover"
                                      onerror="this.src='/assets/product-images/SampleProduct.png'">
                             </div>
                         </button>
-                    <?php endfor; ?>
+                    <?php endforeach; ?>
                 </div>
             </div>
             

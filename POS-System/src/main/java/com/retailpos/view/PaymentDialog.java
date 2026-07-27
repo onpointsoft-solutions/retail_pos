@@ -171,7 +171,7 @@ public class PaymentDialog extends JDialog {
             g.gridy = 2;
         }
         JLabel hint = new JLabel("MPESA".equals(method)
-            ? "Use a recent TransRouter payment above. Enter a reference manually only when the phone bridge is unavailable."
+            ? "Use a recent BizFlow Bridge payment above. Enter a reference manually only when the phone bridge is unavailable."
             : "(Optional) Enter transaction reference for records");
         hint.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         hint.setForeground(RetailThemeManager.TEXT_MUTED);
@@ -191,7 +191,7 @@ public class PaymentDialog extends JDialog {
     private void selectRecentMpesaPayment() {
         List<MpesaUdpBridge.PaymentNotice> payments = MpesaUdpBridge.getInstance().recentPayments();
         if (payments.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "No M-Pesa payments received from TransRouter yet.\nEnsure the phone is on the same Wi-Fi network and points to UDP port " + MpesaUdpBridge.PORT + ".");
+            JOptionPane.showMessageDialog(this, "No M-Pesa payments received from BizFlow Bridge yet.\nEnsure the phone is on the same Wi-Fi network and points to UDP port " + MpesaUdpBridge.PORT + ".");
             return;
         }
         MpesaUdpBridge.PaymentNotice selected = (MpesaUdpBridge.PaymentNotice) JOptionPane.showInputDialog(

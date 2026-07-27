@@ -6,6 +6,7 @@ import com.retailpos.repository.SettingsRepository;
 import com.retailpos.repository.UserRepository;
 import com.retailpos.service.AuthService;
 import com.retailpos.service.PrintService;
+import com.retailpos.service.LicenseService;
 import com.retailpos.ui.Icons;
 import com.retailpos.ui.RetailThemeManager;
 import com.retailpos.util.AuditLogger;
@@ -58,6 +59,7 @@ public class SettingsPanel extends JPanel {
         tabs.addTab("Printer", buildPrinterTab());
         tabs.addTab("Tax & Loyalty", buildTaxTab());
         tabs.addTab("Sync", buildSyncTab());
+        tabs.addTab("License", buildLicenseTab());
         tabs.addTab("Backup", buildBackupTab());
         tabs.addTab("Users", buildUsersTab());
         add(tabs, BorderLayout.CENTER);
@@ -68,6 +70,109 @@ public class SettingsPanel extends JPanel {
         saveBtn.addActionListener(e -> saveSettings());
         footer.add(saveBtn);
         add(footer, BorderLayout.SOUTH);
+    }
+
+    private JPanel buildLicenseTab() {
+        JPanel content = new JPanel();
+        content.setOpaque(false);
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBorder(new EmptyBorder(24, 24, 24, 24));
+
+        JLabel title = RetailThemeManager.headerLabel("BizFlow POS License");
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel description = RetailThemeManager.subLabel(
+            "Your free trial lasts 30 days. Paid licenses validate daily and support a seven-day offline grace period."
+        );
+        description.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel statusCard = RetailThemeManager.card();
+        statusCard.setLayout(new GridLayout(4, 1, 0, 8));
+        statusCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 180));
+        statusCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel status = new JLabel("Checking license…");
+        status.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        JLabel plan = new JLabel("Plan: —");
+        JLabel expiry = new JLabel("Expiry: —");
+        JLabel workstation = new JLabel(
+            "Workstation: " + LicenseService.getInstance().getMachineId().substring(0, 16).toUpperCase() + "…"
+        );
+        statusCard.add(status);
+        statusCard.add(plan);
+        statusCard.add(expiry);
+        statusCard.add(workstation);
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        actions.setOpaque(false);
+        actions.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JButton activate = RetailThemeManager.primaryButton("Activate or change license");
+        JButton validate = RetailThemeManager.secondaryButton("Validate now");
+        actions.add(activate);
+        actions.add(validate);
+
+        Runnable refresh = () -> new SwingWorker<LicenseService.LicenseSnapshot, Void>() {
+            @Override protected LicenseService.LicenseSnapshot doInBackground() {
+                return LicenseService.getInstance().checkAccess();
+            }
+            @Override protected void done() {
+                try {
+                    LicenseService.LicenseSnapshot snapshot = get();
+                    status.setText(snapshot.getDisplayText());
+                    status.setForeground(switch (snapshot.getStatus()) {
+                        case ACTIVE -> RetailThemeManager.ACCENT;
+                        case TRIAL, GRACE -> RetailThemeManager.WARNING;
+                        case EXPIRED, INVALID -> RetailThemeManager.DANGER;
+                    });
+                    plan.setText("Plan: " + snapshot.getPlanName());
+                    expiry.setText("Expires: " + (snapshot.getExpiresAt() == null
+                        ? "—" : java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy")
+                            .withZone(java.time.ZoneId.systemDefault()).format(snapshot.getExpiresAt())));
+                } catch (Exception exception) {
+                    status.setText("Could not load license status");
+                    status.setForeground(RetailThemeManager.DANGER);
+                }
+            }
+        }.execute();
+
+        activate.addActionListener(event -> {
+            LicenseService.LicenseSnapshot snapshot = LicenseService.getInstance().checkAccess();
+            Window owner = SwingUtilities.getWindowAncestor(this);
+            LicenseActivationDialog dialog = new LicenseActivationDialog(owner, snapshot, true);
+            dialog.setVisible(true);
+            refresh.run();
+        });
+        validate.addActionListener(event -> {
+            validate.setEnabled(false);
+            new SwingWorker<LicenseService.LicenseSnapshot, Void>() {
+                @Override protected LicenseService.LicenseSnapshot doInBackground() throws Exception {
+                    return LicenseService.getInstance().refreshNow();
+                }
+                @Override protected void done() {
+                    validate.setEnabled(true);
+                    try {
+                        get();
+                        refresh.run();
+                    } catch (Exception exception) {
+                        JOptionPane.showMessageDialog(
+                            SettingsPanel.this,
+                            exception.getCause() == null ? exception.getMessage()
+                                : exception.getCause().getMessage(),
+                            "License Validation",
+                            JOptionPane.ERROR_MESSAGE
+                        );
+                    }
+                }
+            }.execute();
+        });
+
+        content.add(title);
+        content.add(Box.createVerticalStrut(6));
+        content.add(description);
+        content.add(Box.createVerticalStrut(20));
+        content.add(statusCard);
+        content.add(Box.createVerticalStrut(16));
+        content.add(actions);
+        refresh.run();
+        return wrap(content);
     }
 
     private JPanel buildStoreTab() {
@@ -156,14 +261,23 @@ public class SettingsPanel extends JPanel {
         syncUserF.setText(settings.getSyncApiUsername() != null ? settings.getSyncApiUsername() : "");
         syncPassF.setText(settings.getSyncApiPassword() != null ? settings.getSyncApiPassword() : "");
         syncTokenF.setText(settings.getSyncApiToken());
-        GridBagConstraints g = baseGbc(8);
+        GridBagConstraints hintG = baseGbc(8);
+        JLabel syncHint = new JLabel("<html>For many computers, every workstation must use the same backend URL with the server IP, not localhost. Example: http://192.168.1.20/retail-pos-api/api/</html>");
+        syncHint.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        syncHint.setForeground(RetailThemeManager.TEXT_MUTED);
+        p.add(syncHint, hintG);
+        GridBagConstraints g = baseGbc(9);
         autoSyncCb = new JCheckBox("Enable automatic synchronisation");
         autoSyncCb.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         autoSyncCb.setSelected(settings.isAutoSync());
         p.add(autoSyncCb, g);
         // Manual sync trigger button
-        g.gridy = 9; g.insets = new Insets(12, 0, 4, 0);
+        g.gridy = 10; g.insets = new Insets(12, 0, 4, 0);
+        JPanel syncActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        syncActions.setOpaque(false);
+        JButton testConnection = RetailThemeManager.secondaryButton("Test Backend", "online");
         JButton syncNow = RetailThemeManager.secondaryButton("Sync Now", "sync");
+        testConnection.addActionListener(e -> testSyncConnection(testConnection));
         syncNow.addActionListener(e -> {
             syncNow.setEnabled(false); syncNow.setText("Syncing…");
             com.retailpos.sync.SyncService.getInstance().triggerSync();
@@ -172,8 +286,31 @@ public class SettingsPanel extends JPanel {
             });
             t.setRepeats(false); t.start();
         });
-        p.add(syncNow, g);
+        syncActions.add(testConnection);
+        syncActions.add(syncNow);
+        p.add(syncActions, g);
         return wrap(p);
+    }
+
+    private void testSyncConnection(JButton button) {
+        String url = syncUrlF.getText().trim();
+        button.setEnabled(false);
+        button.setText("Testing...");
+        new SwingWorker<String, Void>() {
+            @Override protected String doInBackground() {
+                return com.retailpos.sync.SyncService.getInstance().testConnection(url);
+            }
+
+            @Override protected void done() {
+                button.setEnabled(true);
+                button.setText("Test Backend");
+                try {
+                    JOptionPane.showMessageDialog(SettingsPanel.this, get(), "Backend Test", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception exception) {
+                    JOptionPane.showMessageDialog(SettingsPanel.this, "Backend test failed: " + exception.getMessage(), "Backend Test", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     private JPanel buildBackupTab() {
@@ -337,7 +474,7 @@ public class SettingsPanel extends JPanel {
 
     private void importTransactions() {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Select Retail POS backup database");
+        chooser.setDialogTitle("Select BizFlow POS backup database");
         chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("SQLite database", "db", "sqlite", "sqlite3"));
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         int confirmation = JOptionPane.showConfirmDialog(this,

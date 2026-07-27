@@ -55,6 +55,7 @@
                         <li><a href="delivery-shipping.php" class="text-gray-300 hover:text-primary-gold transition-colors text-sm">Delivery & Shipping</a></li>
                         <li><a href="returns-funds.php" class="text-gray-300 hover:text-primary-gold transition-colors text-sm">Returns & Refunds</a></li>
                         <li><a href="faq.php" class="text-gray-300 hover:text-primary-gold transition-colors text-sm">FAQ</a></li>
+                        <li><a href="licensing.php" class="text-gray-300 hover:text-primary-gold transition-colors text-sm">BizFlow POS Licensing</a></li>
                     </ul>
                 </div>
                 

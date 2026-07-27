@@ -15,7 +15,7 @@ class AuthMiddleware
         'user_id'  => 'system',
         'username' => 'system',
         'role'     => 'ADMIN',
-        'store_id' => null,
+        'business_id' => null,
     ];
 
     /**

@@ -6,6 +6,44 @@ define('DB_USER', 'root');
 define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');
 
+// Product images are stored by the POS API on its own subdomain. Override this
+// in cPanel with PRODUCT_IMAGE_BASE_URL if the API hostname changes.
+define(
+    'PRODUCT_IMAGE_BASE_URL',
+    rtrim(getenv('PRODUCT_IMAGE_BASE_URL') ?: 'https://pos.victoriousgeneralshop.com', '/')
+);
+
+function shopProductImageUrl(?string $path): string {
+    $fallback = '/assets/product-images/SampleProduct.png';
+    $path = trim((string) $path);
+    if ($path === '') {
+        return $fallback;
+    }
+    if (preg_match('#^https?://#i', $path)) {
+        return $path;
+    }
+
+    $normalized = ltrim(str_replace('\\', '/', $path), '/');
+    if (str_starts_with($normalized, 'uploads/')) {
+        return PRODUCT_IMAGE_BASE_URL . '/' . $normalized;
+    }
+
+    return '/' . $normalized;
+}
+
+function shopProductImageUrls(?string $paths): array {
+    $images = array_values(array_filter(array_map(
+        static fn(string $path): string => trim($path),
+        explode(';', (string) $paths)
+    )));
+
+    if (!$images) {
+        return [shopProductImageUrl(null)];
+    }
+
+    return array_map('shopProductImageUrl', $images);
+}
+
 // Create database connection
 function getDbConnection() {
     try {

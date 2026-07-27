@@ -36,6 +36,7 @@ public class SettingsRepository {
         if (kv.containsKey("backup_time"))          s.setBackupTime(kv.get("backup_time"));
         if (kv.containsKey("auto_print_receipt"))   s.setAutoPrintReceipt(Boolean.parseBoolean(kv.getOrDefault("auto_print_receipt","true")));
         if (kv.containsKey("setup_complete"))       s.setSetupComplete(Boolean.parseBoolean(kv.get("setup_complete")));
+        if (kv.containsKey("last_successful_sync")) s.setLastSuccessfulSync(kv.get("last_successful_sync"));
         return s;
     }
 
@@ -52,7 +53,8 @@ public class SettingsRepository {
             {"primary_color", s.getPrimaryColor()},
             {"backup_path", s.getBackupPath()}, {"backup_time", s.getBackupTime()},
             {"auto_print_receipt", String.valueOf(s.isAutoPrintReceipt())},
-            {"setup_complete", String.valueOf(s.isSetupComplete())}
+            {"setup_complete", String.valueOf(s.isSetupComplete())},
+            {"last_successful_sync", s.getLastSuccessfulSync()}
         };
         try (Connection c = DatabaseManager.getConnection()) {
             for (String[] kv : pairs) {
