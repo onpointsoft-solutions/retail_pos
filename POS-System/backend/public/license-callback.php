@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../includes/license_payments.php';
+require_once __DIR__ . '/../services/LicensePaymentService.php';
 
 $reference = trim((string)($_GET['reference'] ?? $_GET['trxref'] ?? ''));
 $order = null;

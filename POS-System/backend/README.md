@@ -323,9 +323,10 @@ business license before issuing licenses for additional businesses. See
 
 ### Paystack license checkout
 
-The PHP pricing site initializes Paystack transactions on the server, verifies
+The PHP pricing site in `backend/public` initializes Paystack transactions on the server, verifies
 the KES amount and customer before issuing a license, accepts signed
 `charge.success` webhooks, and creates a protected TXT activation file.
+The shop and API must point to the same licensing MySQL database.
 
 Configure these cPanel environment variables:
 
@@ -336,6 +337,7 @@ LICENSE_SITE_URL=https://pos.mobilemealscenter.co.ke/public
 LICENSE_FILE_DIR=/home/CPANEL_USER/bizflow-private/license-activations
 PRODUCT_IMAGE_BASE_URL=https://pos.mobilemealscenter.co.ke
 PUBLIC_API_URL=https://pos.mobilemealscenter.co.ke/api
+MAIN_SITE_URL=https://mobilemealscenter.co.ke
 ```
 
 Set the Paystack webhook URL to:

@@ -1,6 +1,7 @@
 <?php
 $pageTitle = 'BizFlow POS Licensing & Pricing';
 $whatsAppNumber = '254742071810';
+$shopUrl = rtrim(getenv('MAIN_SITE_URL') ?: 'https://mobilemealscenter.co.ke', '/') . '/';
 $plans = [
     [
         'name' => 'Starter',
@@ -84,7 +85,7 @@ $plans = [
 <body class="bg-slate-50 text-ink antialiased" style="font-family:Inter,sans-serif" x-data="{annual:true}">
     <header class="border-b border-slate-200 bg-white/90 backdrop-blur sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-5 lg:px-8 h-20 flex items-center justify-between">
-            <a href="index.php" class="flex items-center gap-3">
+            <a href="<?= htmlspecialchars($shopUrl) ?>" class="flex items-center gap-3">
                 <span class="w-11 h-11 rounded-2xl bg-brand-600 text-white grid place-items-center shadow-lg shadow-blue-200">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M5 7l1 13h12l1-13M9 11v5m6-5v5M8 7l1-3h6l1 3"/>
@@ -96,7 +97,7 @@ $plans = [
                 </span>
             </a>
             <div class="flex items-center gap-3">
-                <a href="index.php" class="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-slate-600 hover:text-brand-600">Back to shop</a>
+                <a href="<?= htmlspecialchars($shopUrl) ?>" class="hidden sm:inline-flex px-4 py-2 text-sm font-semibold text-slate-600 hover:text-brand-600">Back to shop</a>
                 <a href="https://wa.me/<?= $whatsAppNumber ?>?text=<?= urlencode('Hello, I would like to activate BizFlow POS.') ?>"
                    target="_blank"
                    class="inline-flex items-center rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white hover:bg-brand-700 transition shadow-lg shadow-blue-200">

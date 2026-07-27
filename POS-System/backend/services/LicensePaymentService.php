@@ -1,9 +1,8 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/config.php';
-
-const BIZFLOW_BACKEND_URL = 'https://pos.mobilemealscenter.co.ke/api/';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../config/database.php';
 
 function licensePaymentDb(): PDO
 {
@@ -11,7 +10,7 @@ function licensePaymentDb(): PDO
     if ($connection instanceof PDO) {
         return $connection;
     }
-    $connection = getDbConnection();
+    $connection = Database::getConnection();
     ensureLicensePaymentSchema($connection);
     return $connection;
 }
@@ -67,6 +66,10 @@ function ensureLicensePaymentSchema(PDO $db): void
             INDEX idx_license_expiry (expires_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
     );
+    if (!licensePaymentColumnExists($db, 'licenses', 'business_id')) {
+        $db->exec('ALTER TABLE licenses ADD COLUMN business_id VARCHAR(36) NULL AFTER id');
+        $db->exec('ALTER TABLE licenses ADD INDEX idx_license_business (business_id)');
+    }
     $db->exec(
         'CREATE TABLE IF NOT EXISTS license_orders (
             id VARCHAR(36) NOT NULL PRIMARY KEY,
@@ -478,7 +481,7 @@ function writeActivationFile(
         'ACTIVATION',
         '1. Open BizFlow POS.',
         '2. Open License Management.',
-        '3. Backend URL: ' . BIZFLOW_BACKEND_URL,
+        '3. Backend URL: ' . bizflowBackendUrl(),
         '4. Enter the license key exactly as shown above.',
         '5. Use the same key on permitted computers for this business.',
         '',
@@ -499,8 +502,26 @@ function activationStorageDirectory(): string
     $configured = trim((string)(getenv('LICENSE_FILE_DIR') ?: ''));
     return $configured !== ''
         ? rtrim($configured, '/\\')
-        : dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'storage'
+        : dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage'
             . DIRECTORY_SEPARATOR . 'license-activations';
+}
+
+function bizflowBackendUrl(): string
+{
+    $url = trim((string)(
+        getenv('PUBLIC_API_URL') ?: 'https://pos.mobilemealscenter.co.ke/api/'
+    ));
+    return rtrim($url, '/') . '/';
+}
+
+function licensePaymentColumnExists(PDO $db, string $table, string $column): bool
+{
+    $statement = $db->prepare(
+        'SELECT 1 FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+    );
+    $statement->execute([$table, $column]);
+    return (bool)$statement->fetchColumn();
 }
 
 function paystackSecretKey(): string
@@ -558,9 +579,7 @@ function licenseUuid(): string
 
 function licenseCsrfToken(): string
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    startLicenseSession();
     if (empty($_SESSION['license_csrf'])) {
         $_SESSION['license_csrf'] = bin2hex(random_bytes(24));
     }
@@ -569,11 +588,25 @@ function licenseCsrfToken(): string
 
 function validateLicenseCsrf(string $token): void
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    startLicenseSession();
     if (empty($_SESSION['license_csrf'])
         || !hash_equals((string)$_SESSION['license_csrf'], $token)) {
         throw new RuntimeException('Your checkout session expired. Please try again.');
     }
+}
+
+function startLicenseSession(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
+    session_name('bizflow_license_checkout');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => true,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
 }

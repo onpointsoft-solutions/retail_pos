@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../includes/license_payments.php';
+require_once __DIR__ . '/../services/LicensePaymentService.php';
 
 $plans = licensePlans();
 $planCode = strtoupper(trim((string)($_POST['plan_code'] ?? $_GET['plan'] ?? 'BUSINESS')));
@@ -32,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $price = $period === 'annual' ? $plan['annual_price'] : $plan['monthly_price'];
+$csrfToken = licenseCsrfToken();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -75,7 +76,7 @@ $price = $period === 'annual' ? $plan['annual_price'] : $plan['monthly_price'];
             <?php endif; ?>
 
             <form method="post" class="mt-8 space-y-5">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(licenseCsrfToken()) ?>">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                 <input type="hidden" name="plan_code" value="<?= htmlspecialchars($planCode) ?>">
                 <input type="hidden" name="billing_period" value="<?= htmlspecialchars($period) ?>">
 
