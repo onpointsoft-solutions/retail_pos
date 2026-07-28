@@ -340,6 +340,13 @@ PUBLIC_API_URL=https://pos.mobilemealscenter.co.ke/api
 MAIN_SITE_URL=https://mobilemealscenter.co.ke
 ```
 
+If cPanel does not expose environment variables, copy
+`backend/config/secrets.example.php` to `backend/config/secrets.php`, enter the
+real Paystack secret and a long random download secret, then upload that private
+file. The `config/.htaccess` file blocks HTTP access and `.gitignore` prevents
+the private file from being committed. Environment variables take precedence
+when both methods are configured.
+
 Set the Paystack webhook URL to:
 
 ```text

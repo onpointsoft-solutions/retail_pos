@@ -369,7 +369,7 @@ class LicenseController
              max_devices = VALUES(max_devices), features = VALUES(features), display_order = VALUES(display_order)'
         );
         $plans = [
-            ['STARTER', 'Starter', 'For a single growing shop', 2500, 25000, 1,
+            ['STARTER', 'Starter', 'For a single growing shop', 2500, 1, 1,
                 ['Complete POS and inventory', 'Professional receipts and reports', 'Product image sync', 'Email support'], 1],
             ['BUSINESS', 'Business', 'For established shops and small chains', 5500, 55000, 5,
                 ['Everything in Starter', 'Up to 5 synchronized computers', 'M-Pesa Bridge transactions', 'Priority WhatsApp support'], 2],

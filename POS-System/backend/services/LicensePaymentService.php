@@ -107,7 +107,7 @@ function ensureLicensePaymentSchema(PDO $db): void
          display_order = VALUES(display_order)'
     );
     $plans = [
-        ['STARTER', 'Starter', 'For a single growing shop', 2500, 25000, 1,
+        ['STARTER', 'Starter', 'For a single growing shop', 2500, 1, 1,
             ['Complete POS and inventory', 'Professional receipts and reports', 'Product image sync'], 1],
         ['BUSINESS', 'Business', 'For established shops and small chains', 5500, 55000, 5,
             ['Everything in Starter', 'Up to 5 synchronized computers', 'M-Pesa Bridge transactions'], 2],
@@ -526,17 +526,47 @@ function licensePaymentColumnExists(PDO $db, string $table, string $column): boo
 
 function paystackSecretKey(): string
 {
-    $secret = trim((string)(getenv('PAYSTACK_SECRET_KEY') ?: ''));
+    $secrets = licensePrivateSecrets();
+    $secret = trim((string)(
+        getenv('PAYSTACK_SECRET_KEY')
+        ?: ($secrets['paystack_secret_key'] ?? '')
+    ));
     if ($secret === '' || !str_starts_with($secret, 'sk_')) {
-        throw new RuntimeException('Paystack is not configured. Set PAYSTACK_SECRET_KEY.');
+        throw new RuntimeException(
+            'Paystack is not configured. Set PAYSTACK_SECRET_KEY or create '
+            . 'backend/config/secrets.php from secrets.example.php.'
+        );
     }
     return $secret;
 }
 
 function licenseDownloadSecret(): string
 {
-    $secret = trim((string)(getenv('LICENSE_DOWNLOAD_SECRET') ?: ''));
+    $secrets = licensePrivateSecrets();
+    $secret = trim((string)(
+        getenv('LICENSE_DOWNLOAD_SECRET')
+        ?: ($secrets['license_download_secret'] ?? '')
+    ));
     return $secret !== '' ? $secret : paystackSecretKey();
+}
+
+function licensePrivateSecrets(): array
+{
+    static $secrets = null;
+    if (is_array($secrets)) {
+        return $secrets;
+    }
+
+    $path = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'config'
+        . DIRECTORY_SEPARATOR . 'secrets.php';
+    if (!is_file($path)) {
+        $secrets = [];
+        return $secrets;
+    }
+
+    $loaded = require $path;
+    $secrets = is_array($loaded) ? $loaded : [];
+    return $secrets;
 }
 
 function licensePublicUrl(string $path): string

@@ -6,6 +6,7 @@ import com.retailpos.service.LicenseService;
 import com.retailpos.ui.RetailThemeManager;
 import com.retailpos.util.DatabaseManager;
 import com.retailpos.util.AppPaths;
+import com.retailpos.util.AppIcon;
 import com.retailpos.view.LoginDialog;
 import com.retailpos.view.LicenseActivationDialog;
 import com.retailpos.view.MainFrame;
@@ -25,6 +26,7 @@ public class RetailPOS {
 
         SwingUtilities.invokeLater(() -> {
             try {
+                AppIcon.applyToTaskbar();
                 // Initialize database
                 Path databaseFile = AppPaths.databaseFile();
                 DatabaseManager.initialize(databaseFile.toString());
@@ -37,6 +39,7 @@ public class RetailPOS {
                 if (!settings.isSetupComplete()) {
                     // Show setup wizard
                     SetupWizard wizard = new SetupWizard(null);
+                    AppIcon.apply(wizard);
                     wizard.setVisible(true);
                     if (!wizard.isSetupComplete()) {
                         DatabaseManager.close();
@@ -52,6 +55,7 @@ public class RetailPOS {
                 if (!license.isAllowed()) {
                     LicenseActivationDialog activation =
                         new LicenseActivationDialog(null, license, false);
+                    AppIcon.apply(activation);
                     activation.setVisible(true);
                     if (!activation.isActivated()) {
                         DatabaseManager.close();
@@ -62,6 +66,7 @@ public class RetailPOS {
 
                 // Show login
                 LoginDialog login = new LoginDialog(null);
+                AppIcon.apply(login);
                 login.setVisible(true);
 
                 if (!login.isLoginSuccessful()) {
@@ -79,6 +84,7 @@ public class RetailPOS {
 
                 // Launch main window
                 MainFrame frame = new MainFrame();
+                AppIcon.apply(frame);
                 frame.setVisible(true);
 
             } catch (Exception e) {
