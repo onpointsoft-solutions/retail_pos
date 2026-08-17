@@ -14,6 +14,7 @@ import java.awt.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.Optional;
 import java.util.List;
 
 /**
@@ -219,7 +220,7 @@ public class PurchasesPanel extends JPanel {
 
                     // ── Header form ───────────────────────────────────────────
                     JPanel header = new JPanel(new GridBagLayout());
-                    header.setBackground(Color.WHITE);
+                    header.setBackground(RetailThemeManager.CARD_BG);
                     header.setBorder(BorderFactory.createCompoundBorder(
                         BorderFactory.createLineBorder(RetailThemeManager.BORDER),
                         new EmptyBorder(14, 16, 14, 16)));
@@ -452,12 +453,12 @@ public class PurchasesPanel extends JPanel {
         d.setSize(640, 480); d.setLocationRelativeTo(this);
 
         JPanel panel = new JPanel(new BorderLayout(0, 10));
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(RetailThemeManager.CARD_BG);
         panel.setBorder(new EmptyBorder(16, 18, 16, 18));
 
         // Header info
         JPanel info = new JPanel(new GridLayout(0, 2, 8, 6));
-        info.setBackground(Color.WHITE);
+        info.setBackground(RetailThemeManager.CARD_BG);
         addInfoRow(info, "PO Number:",  po.getId().substring(0, 8).toUpperCase());
         addInfoRow(info, "Supplier:",   po.getSupplierName() != null ? po.getSupplierName() : "");
         addInfoRow(info, "Status:",     po.getStatus());
@@ -527,10 +528,10 @@ public class PurchasesPanel extends JPanel {
 
         JDialog d = new JDialog((Frame) SwingUtilities.getWindowAncestor(this),
             "Receive Stock — PO " + po.getId().substring(0, 8).toUpperCase(), true);
-        d.setSize(680, 500); d.setLocationRelativeTo(this);
+        d.setSize(820, 560); d.setLocationRelativeTo(this);
 
         JPanel panel = new JPanel(new BorderLayout(0, 10));
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(RetailThemeManager.CARD_BG);
         panel.setBorder(new EmptyBorder(16, 18, 16, 18));
 
         // Info header
@@ -540,46 +541,127 @@ public class PurchasesPanel extends JPanel {
         hdr.setForeground(RetailThemeManager.TEXT);
         panel.add(hdr, BorderLayout.NORTH);
 
-        // Receipt table — editable "Receiving Qty" column
-        String[] cols = {"Product", "Ordered", "Already Received", "Outstanding", "Receiving Now *"};
+        // Receipt table columns:
+        //   0 Product | 1 Ordered | 2 Already Received | 3 Outstanding
+        //   4 Receiving Now * | 5 Cost Price | 6 Markup % | 7 Selling Price *
+        String[] cols = {
+            "Product", "Ordered", "Rcvd", "Outstanding",
+            "Receiving Now *", "Cost (KES)", "Markup %", "Selling Price (KES) *"
+        };
         DefaultTableModel receiveModel = new DefaultTableModel(cols, 0) {
-            @Override public boolean isCellEditable(int r, int c) { return c == 4; }
+            // columns 4 (Receiving Now), 6 (Markup %), 7 (Selling Price) are editable
+            @Override public boolean isCellEditable(int r, int c) { return c == 4 || c == 6 || c == 7; }
             @Override public Class<?> getColumnClass(int c) {
-                return c >= 1 ? Integer.class : String.class;
+                return (c >= 1 && c <= 4) ? Integer.class : String.class;
             }
         };
+
+        // Pre-fetch current selling prices for each item
+        List<Double> currentSellingPrices = new ArrayList<>();
         for (PurchaseOrder.PurchaseOrderItem item : po.getItems()) {
+            double sp = 0;
+            try {
+                if (item.getProductId() != null) {
+                    sp = prodSvc.findById(item.getProductId())
+                                .map(com.retailpos.model.Product::getSellingPrice)
+                                .orElse(0.0);
+                }
+            } catch (Exception ignored) {}
+            currentSellingPrices.add(sp);
+        }
+
+        for (int i = 0; i < po.getItems().size(); i++) {
+            PurchaseOrder.PurchaseOrderItem item = po.getItems().get(i);
+            double cost = item.getBuyingPrice();
+            double sp   = currentSellingPrices.get(i);
+            // Compute current markup from stored prices (if cost > 0)
+            double markup = (cost > 0 && sp > 0) ? ((sp - cost) / cost) * 100.0 : 0.0;
             receiveModel.addRow(new Object[]{
                 item.getProductName(),
                 item.getOrderedQty(),
                 item.getReceivedQty(),
                 item.getOutstandingQty(),
-                item.getOutstandingQty()   // default = receive all outstanding
+                item.getOutstandingQty(),          // Receiving Now — default all outstanding
+                String.format("%.2f", cost),        // Cost Price (read-only display)
+                String.format("%.1f", markup),      // Markup %  (editable)
+                String.format("%.2f", sp)           // Selling Price (editable)
             });
         }
+
         JTable receiveTable = new JTable(receiveModel);
         receiveTable.setRowHeight(38);
         receiveTable.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         receiveTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
-        receiveTable.getColumnModel().getColumn(0).setPreferredWidth(200);
-        // Highlight editable column header
-        receiveTable.getTableHeader().getColumnModel().getColumn(4)
-            .setHeaderValue("Receiving Now * (editable)");
-        receiveTable.setShowVerticalLines(false);
+        receiveTable.getTableHeader().setBackground(RetailThemeManager.getInstance().isDark()
+            ? RetailThemeManager.NAVY : RetailThemeManager.SURFACE);
+        receiveTable.setBackground(RetailThemeManager.CARD_BG);
+        receiveTable.setForeground(RetailThemeManager.TEXT);
         receiveTable.setGridColor(RetailThemeManager.BORDER);
-        // Colour the "Receiving Now" column
-        receiveTable.getColumnModel().getColumn(4).setCellRenderer(
+        receiveTable.setSelectionBackground(RetailThemeManager.getInstance().selectionBg());
+        receiveTable.setSelectionForeground(RetailThemeManager.getInstance().selectionFg());
+        receiveTable.getColumnModel().getColumn(0).setPreferredWidth(180);
+        receiveTable.getColumnModel().getColumn(1).setPreferredWidth(60);
+        receiveTable.getColumnModel().getColumn(2).setPreferredWidth(50);
+        receiveTable.getColumnModel().getColumn(3).setPreferredWidth(80);
+        receiveTable.getColumnModel().getColumn(4).setPreferredWidth(100);
+        receiveTable.getColumnModel().getColumn(5).setPreferredWidth(90);
+        receiveTable.getColumnModel().getColumn(6).setPreferredWidth(75);
+        receiveTable.getColumnModel().getColumn(7).setPreferredWidth(140);
+        receiveTable.setShowVerticalLines(false);
+
+        // Highlight editable columns (4, 6, 7) with a tinted renderer
+        javax.swing.table.DefaultTableCellRenderer editableRenderer =
             new javax.swing.table.DefaultTableCellRenderer() {
                 @Override public Component getTableCellRendererComponent(
                         JTable t, Object v, boolean sel, boolean foc, int r, int c) {
                     Component comp = super.getTableCellRendererComponent(t, v, sel, foc, r, c);
                     if (!sel) {
-                        comp.setBackground(new Color(219, 234, 254));
+                        boolean dm = RetailThemeManager.getInstance().isDark();
+                        comp.setBackground(dm
+                            ? new Color(30, 58, 95)          // dark-mode tint
+                            : new Color(219, 234, 254));      // light-mode tint
                         comp.setForeground(RetailThemeManager.TEXT);
                     }
                     return comp;
                 }
-            });
+            };
+        receiveTable.getColumnModel().getColumn(4).setCellRenderer(editableRenderer);
+        receiveTable.getColumnModel().getColumn(6).setCellRenderer(editableRenderer);
+        receiveTable.getColumnModel().getColumn(7).setCellRenderer(editableRenderer);
+
+        // When Markup % changes → auto-recalculate Selling Price
+        // When Selling Price changes → auto-recalculate Markup %
+        // Prevent re-entrant updates with a simple flag
+        boolean[] updating = {false};
+        receiveModel.addTableModelListener(e -> {
+            if (updating[0]) return;
+            int row = e.getFirstRow();
+            int col = e.getColumn();
+            if (row < 0 || row >= receiveModel.getRowCount()) return;
+            if (col == 6) {
+                // Markup % changed → update Selling Price
+                try {
+                    double cost   = Double.parseDouble(receiveModel.getValueAt(row, 5).toString());
+                    double markup = Double.parseDouble(receiveModel.getValueAt(row, 6).toString());
+                    double sp     = cost * (1 + markup / 100.0);
+                    updating[0] = true;
+                    receiveModel.setValueAt(String.format("%.2f", sp), row, 7);
+                    updating[0] = false;
+                } catch (Exception ignored) {}
+            } else if (col == 7) {
+                // Selling Price changed → update Markup %
+                try {
+                    double cost = Double.parseDouble(receiveModel.getValueAt(row, 5).toString());
+                    double sp   = Double.parseDouble(receiveModel.getValueAt(row, 7).toString());
+                    if (cost > 0) {
+                        double markup = ((sp - cost) / cost) * 100.0;
+                        updating[0] = true;
+                        receiveModel.setValueAt(String.format("%.1f", markup), row, 6);
+                        updating[0] = false;
+                    }
+                } catch (Exception ignored) {}
+            }
+        });
 
         panel.add(RetailThemeManager.scroll(receiveTable), BorderLayout.CENTER);
 
@@ -592,9 +674,22 @@ public class PurchasesPanel extends JPanel {
         JTextField expiryF = RetailThemeManager.styledField();
         expiryF.setPreferredSize(new Dimension(130, 36));
         expiryF.putClientProperty("JTextField.placeholderText", "Expiry YYYY-MM-DD");
-        extra.add(new JLabel("Batch:")); extra.add(batchF);
-        extra.add(new JLabel("Expiry:")); extra.add(expiryF);
-        panel.add(extra, BorderLayout.SOUTH);
+        JLabel batchLbl  = new JLabel("Batch:");  batchLbl.setForeground(RetailThemeManager.TEXT_MUTED);
+        JLabel expiryLbl = new JLabel("Expiry:"); expiryLbl.setForeground(RetailThemeManager.TEXT_MUTED);
+        extra.add(batchLbl);  extra.add(batchF);
+        extra.add(expiryLbl); extra.add(expiryF);
+
+        JLabel infoLbl = new JLabel(
+            "<html><i style='color:gray'>Tip: Edit <b>Markup %</b> or <b>Selling Price</b> — "
+            + "they auto-calculate each other. New prices are saved when you confirm.</i></html>");
+        infoLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        infoLbl.setForeground(RetailThemeManager.TEXT_MUTED);
+
+        JPanel southPanel = new JPanel(new BorderLayout(0, 4));
+        southPanel.setOpaque(false);
+        southPanel.add(extra, BorderLayout.NORTH);
+        southPanel.add(infoLbl, BorderLayout.SOUTH);
+        panel.add(southPanel, BorderLayout.SOUTH);
 
         d.setContentPane(panel);
 
@@ -623,8 +718,9 @@ public class PurchasesPanel extends JPanel {
             }
             final java.time.LocalDate finalExpiry = expiry;
 
-            // Collect receive quantities
+            // Collect receive quantities and new selling prices
             List<int[]> receiveQtys = new ArrayList<>(); // [itemIndex, qty]
+            List<Double> newSellingPrices = new ArrayList<>();
             for (int i = 0; i < receiveModel.getRowCount(); i++) {
                 try {
                     int outstanding = (Integer) receiveModel.getValueAt(i, 3);
@@ -637,8 +733,13 @@ public class PurchasesPanel extends JPanel {
                         return;
                     }
                     receiveQtys.add(new int[]{ i, qty });
+
+                    // Parse new selling price
+                    double newSp = Double.parseDouble(receiveModel.getValueAt(i, 7).toString().trim());
+                    if (newSp < 0) { errLbl.setText("Row " + (i+1) + ": selling price cannot be negative"); return; }
+                    newSellingPrices.add(newSp);
                 } catch (NumberFormatException ex) {
-                    errLbl.setText("Row " + (i+1) + ": invalid quantity");
+                    errLbl.setText("Row " + (i+1) + ": invalid quantity or price");
                     return;
                 }
             }
@@ -656,13 +757,28 @@ public class PurchasesPanel extends JPanel {
                     for (int[] rec : receiveQtys) {
                         int idx = rec[0];
                         int qty = rec[1];
-                        if (qty <= 0) continue;
 
                         PurchaseOrder.PurchaseOrderItem item = po.getItems().get(idx);
-                        // Update inventory
+
                         if (item.getProductId() != null) {
-                            invSvc.recordStockIn(item.getProductId(), qty, batch, finalExpiry, userId);
+                            // Update inventory stock
+                            if (qty > 0) {
+                                invSvc.recordStockIn(item.getProductId(), qty, batch, finalExpiry, userId);
+                            }
+
+                            // Update selling price if it changed
+                            double newSp = newSellingPrices.get(idx);
+                            Optional<com.retailpos.model.Product> optP =
+                                prodSvc.findById(item.getProductId());
+                            if (optP.isPresent()) {
+                                com.retailpos.model.Product prod = optP.get();
+                                if (Math.abs(prod.getSellingPrice() - newSp) > 0.001) {
+                                    prod.setSellingPrice(newSp);
+                                    prodSvc.saveProduct(prod, userId);
+                                }
+                            }
                         }
+
                         // Update received qty on PO item
                         int newReceived = item.getReceivedQty() + qty;
                         poRepo.updateReceivedQty(po.getId(), item.getProductId(), newReceived);

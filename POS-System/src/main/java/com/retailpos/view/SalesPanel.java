@@ -778,18 +778,13 @@ public class SalesPanel extends JPanel {
         String catName   = categoryNames.getOrDefault(p.getCategoryId(), "");
         boolean lowStock  = p.isLowStock();
         boolean outOfStock = p.getCurrentStock() <= 0;
-        boolean dark = RetailThemeManager.getInstance().isDark();
 
-        // ── accent colours per stock state ────────────────────────────────────
+        // ── accent colours per stock state — resolved dynamically at paint time ─
+        // We do NOT capture 'dark' here; instead all colour decisions are
+        // deferred into paintComponent so they always reflect the current theme.
         Color accentColor = outOfStock ? RetailThemeManager.DANGER
                           : lowStock   ? RetailThemeManager.WARNING
                           :              RetailThemeManager.ACCENT;
-        Color cardBg  = outOfStock ? (dark ? new Color(60, 18, 18)  : new Color(255, 241, 241))
-                      : lowStock   ? (dark ? new Color(58, 40,  8)  : new Color(255, 252, 235))
-                      :               RetailThemeManager.CARD_BG;
-        Color borderC = outOfStock ? (dark ? new Color(160, 50, 50)  : new Color(252, 165, 165))
-                      : lowStock   ? (dark ? new Color(160, 110, 20) : new Color(253, 230, 138))
-                      :               RetailThemeManager.BORDER;
 
         // ── load thumbnail ────────────────────────────────────────────────────
         ImageIcon thumb = productImage(p.getImagePath(), 44, 44);
@@ -798,6 +793,15 @@ public class SalesPanel extends JPanel {
         JPanel card = new JPanel(new BorderLayout(0, 0)) {
             @Override
             protected void paintComponent(Graphics g) {
+                // Resolve theme-sensitive colours at paint time so dark-mode
+                // toggles are reflected without recreating the card.
+                boolean dm = RetailThemeManager.getInstance().isDark();
+                Color cardBg  = outOfStock ? (dm ? new Color(60, 18, 18)  : new Color(255, 241, 241))
+                              : lowStock   ? (dm ? new Color(58, 40,  8)  : new Color(255, 252, 235))
+                              :               RetailThemeManager.CARD_BG;
+                Color borderC = outOfStock ? (dm ? new Color(160, 50, 50)  : new Color(252, 165, 165))
+                              : lowStock   ? (dm ? new Color(160, 110, 20) : new Color(253, 230, 138))
+                              :               RetailThemeManager.BORDER;
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(cardBg);
@@ -825,10 +829,14 @@ public class SalesPanel extends JPanel {
             // coloured circle with first letter
             JPanel circle = new JPanel(new GridBagLayout()) {
                 @Override protected void paintComponent(Graphics g) {
+                    boolean dm = RetailThemeManager.getInstance().isDark();
+                    Color liveAccent = outOfStock ? RetailThemeManager.DANGER
+                                     : lowStock   ? RetailThemeManager.WARNING
+                                     :              RetailThemeManager.ACCENT;
                     Graphics2D g2 = (Graphics2D) g.create();
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                    g2.setColor(new Color(accentColor.getRed(), accentColor.getGreen(),
-                                         accentColor.getBlue(), dark ? 60 : 30));
+                    g2.setColor(new Color(liveAccent.getRed(), liveAccent.getGreen(),
+                                         liveAccent.getBlue(), dm ? 60 : 30));
                     g2.fillOval(0, 0, getWidth(), getHeight());
                     g2.dispose();
                 }
@@ -870,16 +878,21 @@ public class SalesPanel extends JPanel {
                         :              p.getCurrentStock() + " " + p.getUnit();
         JLabel stockLabel = new JLabel(stockTxt) {
             @Override protected void paintComponent(Graphics g) {
+                boolean dm = RetailThemeManager.getInstance().isDark();
+                Color liveAccent = outOfStock ? RetailThemeManager.DANGER
+                                 : lowStock   ? RetailThemeManager.WARNING
+                                 :              RetailThemeManager.ACCENT;
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(new Color(accentColor.getRed(), accentColor.getGreen(),
-                                     accentColor.getBlue(), dark ? 55 : 30));
+                g2.setColor(new Color(liveAccent.getRed(), liveAccent.getGreen(),
+                                     liveAccent.getBlue(), dm ? 55 : 30));
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
                 g2.dispose();
                 super.paintComponent(g);
             }
         };
         stockLabel.setFont(new Font("Segoe UI", Font.PLAIN, 9));
+        // Foreground is set dynamically via FlatLaf theme propagation; use accent as a fallback
         stockLabel.setForeground(accentColor);
         stockLabel.setOpaque(false);
         stockLabel.setBorder(new EmptyBorder(1, 5, 1, 5));
