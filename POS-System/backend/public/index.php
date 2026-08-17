@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/logo.php';
+require_once __DIR__ . '/../helpers/VisitTracker.php';
+VisitTracker::record('home');
 
 $shopUrl     = rtrim(getenv('MAIN_SITE_URL') ?: 'https://mobilemealscenter.co.ke', '/') . '/';
 $whatsAppNum = '254742071810';

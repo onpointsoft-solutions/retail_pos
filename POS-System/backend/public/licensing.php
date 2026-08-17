@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/logo.php';
+require_once __DIR__ . '/../helpers/VisitTracker.php';
+VisitTracker::record('pricing');
 
 $pageTitle    = 'BizFlow POS — Licensing & Pricing';
 $whatsAppNum  = '254702502952';
