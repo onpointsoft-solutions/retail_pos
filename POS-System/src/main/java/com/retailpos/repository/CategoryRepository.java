@@ -55,4 +55,20 @@ public class CategoryRepository {
         }
         return list;
     }
+
+    /** Deletes only categories that are not assigned to products. */
+    public void deleteIfUnused(String id) throws SQLException {
+        try (Connection c = DatabaseManager.getConnection()) {
+            try (PreparedStatement usage = c.prepareStatement("SELECT COUNT(*) FROM products WHERE category_id=?")) {
+                usage.setString(1, id);
+                ResultSet rows = usage.executeQuery();
+                if (rows.next() && rows.getInt(1) > 0)
+                    throw new SQLException("This category is assigned to products. Reassign those products before deleting it.");
+            }
+            try (PreparedStatement delete = c.prepareStatement("DELETE FROM categories WHERE id=?")) {
+                delete.setString(1, id);
+                if (delete.executeUpdate() == 0) throw new SQLException("Category was not found.");
+            }
+        }
+    }
 }

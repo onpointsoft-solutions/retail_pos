@@ -1,0 +1,29 @@
+Source: bizflow-pos
+Section: misc
+Priority: optional
+Maintainer: Onpointsoft Solutions <mobilemealscenter@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://pos.mobilemealscenter.co.ke
+
+Package: bizflow-pos
+Architecture: all
+Depends: default-jre-headless (>= 2:1.21) | java21-runtime-headless,
+         libgtk-3-0,
+         libxtst6,
+         libxrender1,
+         libxi6,
+         fonts-dejavu-core
+Recommends: cups
+Suggests: cups-bsd
+Description: BizFlow POS – Desktop Point of Sale for Retail / Supermarket
+ BizFlow POS is a feature-rich, offline-capable desktop Point of Sale
+ system designed for retail shops and supermarkets. It provides:
+  * Sales and receipt management with barcode scanning support
+  * Inventory and product catalogue management
+  * Role-based staff logins with BCrypt-secured passwords
+  * Daily / weekly / monthly sales reports exported as PDF or Excel
+  * Optional live sync to the Mobile Meals Center cloud API
+  * SQLite local database — no server setup required
+ .
+ Requires Java 21 or later (OpenJDK 21 recommended).

@@ -100,7 +100,7 @@ public class PurchasesPanel extends JPanel {
         table.getTableHeader().setBackground(RetailThemeManager.SURFACE);
         table.setShowVerticalLines(false);
         table.setGridColor(RetailThemeManager.BORDER);
-        table.setSelectionBackground(new Color(219, 234, 254));
+        table.setSelectionBackground(RetailThemeManager.getInstance().selectionBg());
         table.getColumnModel().getColumn(0).setPreferredWidth(80);
         table.getColumnModel().getColumn(1).setPreferredWidth(180);
         table.getColumnModel().getColumn(2).setPreferredWidth(130);

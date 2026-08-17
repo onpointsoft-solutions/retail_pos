@@ -5,6 +5,8 @@ import com.formdev.flatlaf.FlatLightLaf;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.geom.Arc2D;
+import java.awt.event.ActionEvent;
 
 public class RetailThemeManager {
     // Retail brand palette — light mode base
@@ -18,7 +20,7 @@ public class RetailThemeManager {
     public static Color CARD_BG    = Color.WHITE;
     public static Color TEXT       = new Color(15,  23, 42);
     public static Color TEXT_MUTED = new Color(100, 116, 139);
-    public static Color BORDER     = new Color(226, 232, 240);
+    public static Color BORDER     = new Color(203, 213, 225);
 
     // Dark mode palette — tuned for contrast/eye comfort on dark backgrounds
     // (softer, slightly desaturated accents; true near-black surfaces; layered card elevation)
@@ -53,7 +55,7 @@ public class RetailThemeManager {
     private static final Color LIGHT_CARD      = Color.WHITE;
     private static final Color LIGHT_TEXT      = new Color(15, 23, 42);
     private static final Color LIGHT_TEXT_MUTED= new Color(100, 116, 139);
-    private static final Color LIGHT_BORDER    = new Color(226, 232, 240);
+    private static final Color LIGHT_BORDER    = new Color(203, 213, 225);
 
     private static RetailThemeManager instance;
     private boolean dark = false;
@@ -66,6 +68,9 @@ public class RetailThemeManager {
         return instance;
     }
 
+    /**
+     * Apply theme synchronously (used at startup).
+     */
     public void apply(boolean dark) {
         this.dark = dark;
         try {
@@ -81,6 +86,63 @@ public class RetailThemeManager {
             SwingUtilities.updateComponentTreeUI(w);
             w.repaint();
         }
+    }
+
+    /**
+     * Apply theme with a modern fullscreen overlay spinner.
+     * Call from UI toggle actions so the user sees feedback during the switch.
+     */
+    public void applyWithOverlay(boolean dark, Window owner) {
+        Color spinColor = dark ? new Color(96, 165, 250) : new Color(37, 99, 235);
+        Color boxBg     = dark ? new Color(30, 41, 59)   : Color.WHITE;
+        Color mutedFg   = dark ? new Color(148, 163, 184) : new Color(100, 116, 139);
+
+        JWindow overlay = new JWindow(owner);
+        overlay.setBackground(new Color(0, 0, 0, 0));
+
+        JPanel glass = new JPanel(new GridBagLayout()) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(0, 0, 0, 150));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+            }
+        };
+        glass.setOpaque(false);
+
+        JPanel spinnerBox = new JPanel(new BorderLayout(0, 14)) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(boxBg);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+                g2.dispose();
+            }
+        };
+        spinnerBox.setOpaque(false);
+        spinnerBox.setPreferredSize(new Dimension(180, 130));
+        spinnerBox.setBorder(new EmptyBorder(24, 24, 16, 24));
+
+        ThemeSpinner spinner = new ThemeSpinner(spinColor);
+        JLabel lbl = new JLabel(dark ? "Switching to Dark Mode…" : "Switching to Light Mode…");
+        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        lbl.setForeground(mutedFg);
+        lbl.setHorizontalAlignment(SwingConstants.CENTER);
+        spinnerBox.add(spinner, BorderLayout.CENTER);
+        spinnerBox.add(lbl, BorderLayout.SOUTH);
+        glass.add(spinnerBox);
+
+        overlay.setContentPane(glass);
+        if (owner != null) overlay.setBounds(owner.getBounds());
+        else overlay.setSize(Toolkit.getDefaultToolkit().getScreenSize());
+        overlay.setVisible(true);
+        spinner.start();
+
+        new SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() { apply(dark); return null; }
+            @Override protected void done() { spinner.stop(); overlay.dispose(); }
+        }.execute();
     }
 
     public boolean isDark() { return dark; }
@@ -136,38 +198,81 @@ public class RetailThemeManager {
         UIManager.put("ScrollBar.thumbArc", 999);
         UIManager.put("ScrollBar.width", 12);
         UIManager.put("Component.focusColor", PRIMARY);
-        UIManager.put("TabbedPane.underlineColor", PRIMARY);
-        UIManager.put("TabbedPane.showTabSeparators", false);
-        UIManager.put("Panel.background", SURFACE);
-        UIManager.put("Viewport.background", SURFACE);
-        UIManager.put("ScrollPane.background", SURFACE);
-        UIManager.put("Table.background", CARD_BG);
-        UIManager.put("Table.foreground", TEXT);
-        UIManager.put("Table.gridColor", BORDER);
-        UIManager.put("Table.selectionBackground", selectionBg());
-        UIManager.put("Table.selectionForeground", selectionFg());
-        UIManager.put("TableHeader.background", dark ? DARK_HEADER_BG : SURFACE);
-        UIManager.put("TableHeader.foreground", TEXT);
-        UIManager.put("TextField.background", fieldBg());
-        UIManager.put("TextField.foreground", TEXT);
-        UIManager.put("PasswordField.background", fieldBg());
-        UIManager.put("PasswordField.foreground", TEXT);
-        UIManager.put("TextArea.background", fieldBg());
-        UIManager.put("TextArea.foreground", TEXT);
-        UIManager.put("ComboBox.background", fieldBg());
-        UIManager.put("ComboBox.foreground", TEXT);
-        UIManager.put("Spinner.background", fieldBg());
-        UIManager.put("Spinner.foreground", TEXT);
-        UIManager.put("ToolTip.background", CARD_BG);
-        UIManager.put("ToolTip.foreground", TEXT);
-        UIManager.put("ToolTip.border", BorderFactory.createLineBorder(BORDER));
-        UIManager.put("Separator.foreground", BORDER);
-        UIManager.put("Label.foreground", TEXT);
+
+        // ── Tab selection ──────────────────────────────────────────────────────
+        UIManager.put("TabbedPane.underlineColor",        PRIMARY);
+        UIManager.put("TabbedPane.showTabSeparators",     false);
+        UIManager.put("TabbedPane.selectedBackground",    dark ? DARK_CARD   : new Color(239, 246, 255));
+        UIManager.put("TabbedPane.selectedForeground",    PRIMARY);
+        UIManager.put("TabbedPane.hoverColor",            dark ? new Color(30, 41, 59, 200) : new Color(219, 234, 254));
+        UIManager.put("TabbedPane.focusColor",            dark ? DARK_CARD   : new Color(239, 246, 255));
+        UIManager.put("TabbedPane.background",            SURFACE);
+        UIManager.put("TabbedPane.foreground",            TEXT);
+
+        // ── Button hover / pressed ─────────────────────────────────────────────
+        UIManager.put("Button.default.hoverBackground",   PRIMARY_DK);
+        UIManager.put("Button.hoverBorderColor",          PRIMARY);
+        UIManager.put("Button.pressedBackground",         dark ? new Color(37, 99, 235) : new Color(29, 78, 216));
+        UIManager.put("Button.selectedBackground",        dark ? DARK_SELECTION_BG : LIGHT_SELECTION_BG);
+        UIManager.put("Button.selectedForeground",        TEXT);
+        UIManager.put("Button.background",                CARD_BG);
+        UIManager.put("Button.foreground",                TEXT);
+
+        // ── Panels / containers ────────────────────────────────────────────────
+        UIManager.put("Panel.background",         SURFACE);
+        UIManager.put("Viewport.background",      SURFACE);
+        UIManager.put("ScrollPane.background",    SURFACE);
+
+        // ── Table ──────────────────────────────────────────────────────────────
+        UIManager.put("Table.background",            CARD_BG);
+        UIManager.put("Table.foreground",            TEXT);
+        UIManager.put("Table.gridColor",             BORDER);
+        UIManager.put("Table.selectionBackground",   selectionBg());
+        UIManager.put("Table.selectionForeground",   selectionFg());
+        UIManager.put("TableHeader.background",      dark ? DARK_HEADER_BG : SURFACE);
+        UIManager.put("TableHeader.foreground",      TEXT);
+
+        // ── Input fields ───────────────────────────────────────────────────────
+        UIManager.put("TextField.background",      fieldBg());
+        UIManager.put("TextField.foreground",      TEXT);
+        UIManager.put("PasswordField.background",  fieldBg());
+        UIManager.put("PasswordField.foreground",  TEXT);
+        UIManager.put("TextArea.background",       fieldBg());
+        UIManager.put("TextArea.foreground",       TEXT);
+        UIManager.put("ComboBox.background",       fieldBg());
+        UIManager.put("ComboBox.foreground",       TEXT);
+        UIManager.put("Spinner.background",        fieldBg());
+        UIManager.put("Spinner.foreground",        TEXT);
+
+        // ── Misc ───────────────────────────────────────────────────────────────
+        UIManager.put("ToolTip.background",    CARD_BG);
+        UIManager.put("ToolTip.foreground",    TEXT);
+        UIManager.put("ToolTip.border",        BorderFactory.createLineBorder(BORDER));
+        UIManager.put("Separator.foreground",  BORDER);
+        UIManager.put("Label.foreground",      TEXT);
+        UIManager.put("CheckBox.foreground",   TEXT);
+        UIManager.put("RadioButton.foreground",TEXT);
+        UIManager.put("List.background",       CARD_BG);
+        UIManager.put("List.foreground",       TEXT);
+        UIManager.put("List.selectionBackground", selectionBg());
+        UIManager.put("List.selectionForeground", selectionFg());
+        UIManager.put("Menu.background",       CARD_BG);
+        UIManager.put("Menu.foreground",       TEXT);
+        UIManager.put("MenuBar.background",    SURFACE);
+        UIManager.put("MenuItem.background",   CARD_BG);
+        UIManager.put("MenuItem.foreground",   TEXT);
+        UIManager.put("PopupMenu.background",  CARD_BG);
+        UIManager.put("PopupMenu.border",      BorderFactory.createLineBorder(BORDER));
     }
 
     private void applyComponentTheme(Component component) {
-        if (component instanceof JPanel panel) {
-            panel.setBackground(panel.getBorder() != null ? CARD_BG : SURFACE);
+        if (component instanceof JDialog dialog) {
+            dialog.getContentPane().setBackground(SURFACE);
+        } else if (component instanceof JPanel panel) {
+            // Only repaint opaque panels — transparent ones inherit from parent
+            if (panel.isOpaque()) {
+                panel.setBackground(panel.getBorder() != null ? CARD_BG : SURFACE);
+            }
         } else if (component instanceof JScrollPane scrollPane) {
             scrollPane.setBackground(SURFACE);
             scrollPane.setBorder(BorderFactory.createLineBorder(BORDER, 1));
@@ -180,6 +285,10 @@ public class RetailThemeManager {
             table.setSelectionForeground(selectionFg());
             table.getTableHeader().setBackground(dark ? DARK_HEADER_BG : SURFACE);
             table.getTableHeader().setForeground(TEXT);
+        } else if (component instanceof JPasswordField passwordField) {
+            passwordField.setBackground(fieldBg());
+            passwordField.setForeground(TEXT);
+            passwordField.setCaretColor(TEXT);
         } else if (component instanceof JTextField textField) {
             textField.setBackground(fieldBg());
             textField.setForeground(TEXT);
@@ -193,12 +302,42 @@ public class RetailThemeManager {
         } else if (component instanceof JComboBox<?> comboBox) {
             comboBox.setBackground(fieldBg());
             comboBox.setForeground(TEXT);
+        } else if (component instanceof JSpinner spinner) {
+            spinner.setBackground(fieldBg());
+            spinner.setForeground(TEXT);
+            if (spinner.getEditor() instanceof JSpinner.DefaultEditor editor) {
+                editor.getTextField().setBackground(fieldBg());
+                editor.getTextField().setForeground(TEXT);
+                editor.getTextField().setCaretColor(TEXT);
+            }
         } else if (component instanceof JCheckBox checkBox) {
             checkBox.setForeground(TEXT);
-            checkBox.setBackground(SURFACE);
+            // Let the checkbox inherit its parent's background rather than forcing SURFACE
+            if (checkBox.getParent() != null) {
+                checkBox.setBackground(checkBox.getParent().getBackground());
+            }
         } else if (component instanceof JTabbedPane tabbedPane) {
             tabbedPane.setBackground(SURFACE);
             tabbedPane.setForeground(TEXT);
+        } else if (component instanceof JButton btn) {
+            // Re-apply colours for factory-built buttons based on their current bg hue
+            Color bg = btn.getBackground();
+            if (bg != null) {
+                if (isColorClose(bg, LIGHT_PRIMARY) || isColorClose(bg, DARK_PRIMARY)) {
+                    btn.setBackground(PRIMARY);
+                    btn.setForeground(dark ? DARK_NAVY : Color.WHITE);
+                } else if (isColorClose(bg, LIGHT_ACCENT) || isColorClose(bg, DARK_ACCENT)) {
+                    btn.setBackground(ACCENT);
+                    btn.setForeground(dark ? DARK_NAVY : Color.WHITE);
+                } else if (isColorClose(bg, LIGHT_DANGER) || isColorClose(bg, DARK_DANGER)) {
+                    btn.setBackground(DANGER);
+                    btn.setForeground(dark ? DARK_NAVY : Color.WHITE);
+                } else {
+                    // secondary button
+                    btn.setBackground(CARD_BG);
+                    btn.setForeground(TEXT);
+                }
+            }
         } else if (component instanceof JLabel label && isManagedLabelColor(label.getForeground())) {
             label.setForeground(label.getFont().isBold() ? TEXT : TEXT_MUTED);
         }
@@ -371,8 +510,8 @@ public class RetailThemeManager {
     }
 
     private Color fieldBg() { return dark ? DARK_FIELD_BG : Color.WHITE; }
-    private Color selectionBg() { return dark ? DARK_SELECTION_BG : LIGHT_SELECTION_BG; }
-    private Color selectionFg() { return dark ? DARK_SELECTION_FG : LIGHT_SELECTION_FG; }
+    public Color selectionBg() { return dark ? DARK_SELECTION_BG : LIGHT_SELECTION_BG; }
+    public Color selectionFg() { return dark ? DARK_SELECTION_FG : LIGHT_SELECTION_FG; }
 
     private boolean isManagedLabelColor(Color color) {
         return color == null
@@ -381,5 +520,59 @@ public class RetailThemeManager {
             || LIGHT_TEXT_MUTED.equals(color)
             || DARK_TEXT.equals(color)
             || DARK_TEXT_MUTED.equals(color);
+    }
+
+    /** Returns true if two colors are within a small Euclidean distance (tolerance ~40). */
+    private static boolean isColorClose(Color a, Color b) {
+        if (a == null || b == null) return false;
+        int dr = a.getRed()   - b.getRed();
+        int dg = a.getGreen() - b.getGreen();
+        int db = a.getBlue()  - b.getBlue();
+        return (dr*dr + dg*dg + db*db) < 1600; // 40^2
+    }
+
+    // ── Animated arc spinner used during theme switching ──────────────────────
+
+    public static class ThemeSpinner extends JPanel {
+        private final Color color;
+        private float angle = 0;
+        private Timer timer;
+
+        public ThemeSpinner(Color color) {
+            this.color = color;
+            setOpaque(false);
+            setPreferredSize(new Dimension(48, 48));
+        }
+
+        public void start() {
+            timer = new Timer(16, (ActionEvent e) -> {
+                angle = (angle + 6) % 360;
+                repaint();
+            });
+            timer.start();
+        }
+
+        public void stop() {
+            if (timer != null) timer.stop();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int size = Math.min(getWidth(), getHeight()) - 6;
+            int x = (getWidth()  - size) / 2;
+            int y = (getHeight() - size) / 2;
+            float stroke = size * 0.12f;
+            g2.setStroke(new BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            // Track
+            g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 40));
+            g2.drawOval(x, y, size, size);
+            // Arc
+            g2.setColor(color);
+            g2.draw(new Arc2D.Float(x, y, size, size, angle, 100, Arc2D.OPEN));
+            g2.dispose();
+        }
     }
 }

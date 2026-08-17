@@ -3,6 +3,7 @@ package com.retailpos.service;
 import com.retailpos.model.*;
 import com.retailpos.repository.*;
 import com.retailpos.util.AuditLogger;
+import com.retailpos.sync.SyncService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -38,11 +39,25 @@ public class SaleService {
         AppSettings settings = settingsRepo.load();
         double taxRate = settings.getTaxRate();
 
-        // Validate stock and build sale items
+        // Validate the entire basket before changing stock.  This avoids a
+        // partially-issued sale when a later item has insufficient stock.
         double subtotal = 0;
         for (Sale.SaleItem item : items) {
+            if (item.getQuantity() <= 0) throw new Exception("Item quantity must be at least 1");
+            if (item.getUnitPrice() < 0 || item.getDiscount() < 0)
+                throw new Exception("Item prices and discounts cannot be negative");
             item.setTaxRate(taxRate);
-            productService.decrementStock(item.getProductId(), item.getQuantity(), adminStockOverride);
+            item.recalculate();
+            // A sale may contain a non-stock service line (for example labour
+            // on a job card).  It is invoiced but must not consume inventory.
+            if (item.getProductId() != null && !item.getProductId().isBlank()) {
+                Product product = productService.findById(item.getProductId())
+                    .orElseThrow(() -> new Exception("Product not found: " + item.getProductName()));
+                if (!adminStockOverride && product.getCurrentStock() < item.getQuantity()) {
+                    throw new ProductService.StockException("Insufficient stock for '" + product.getName()
+                        + "'. Available: " + product.getCurrentStock() + ", required: " + item.getQuantity());
+                }
+            }
             subtotal += item.getLineTotal();
         }
 
@@ -73,7 +88,29 @@ public class SaleService {
         sale.setCreatedAt(LocalDateTime.now());
         sale.setUpdatedAt(LocalDateTime.now());
 
-        saleRepo.insert(sale);
+        // Stock is consumed only once payment and all basket validation pass.
+        // If persistence fails, immediately restore the stock that was consumed
+        // so an unsuccessful invoice cannot silently lose inventory.
+        List<Sale.SaleItem> consumedStock = new ArrayList<>();
+        try {
+            for (Sale.SaleItem item : items) {
+                if (item.getProductId() != null && !item.getProductId().isBlank()) {
+                    productService.decrementStock(item.getProductId(), item.getQuantity(), adminStockOverride);
+                    consumedStock.add(item);
+                }
+            }
+            saleRepo.insert(sale);
+        } catch (Exception failure) {
+            for (int i = consumedStock.size() - 1; i >= 0; i--) {
+                try {
+                    Sale.SaleItem item = consumedStock.get(i);
+                    productService.incrementStock(item.getProductId(), item.getQuantity());
+                } catch (Exception restoreFailure) {
+                    failure.addSuppressed(restoreFailure);
+                }
+            }
+            throw failure;
+        }
 
         // Award loyalty points if customer attached
         if (customerId != null && !customerId.isBlank()) {
@@ -86,6 +123,8 @@ public class SaleService {
         for (SaleListener l : listeners) {
             try { l.onSaleCompleted(sale); } catch (Exception ignored) {}
         }
+        // Let other connected tills receive the new stock level immediately.
+        SyncService.getInstance().notifyLocalChange();
         return sale;
     }
 

@@ -6,18 +6,57 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
-/** Central location for writable, per-user application data. */
+/**
+ * Central location for writable, per-user application data.
+ *
+ * <p>Path resolution per platform:
+ * <ul>
+ *   <li><b>Linux / Unix</b> — honours the XDG Base Directory Specification.
+ *       Data lives in {@code $XDG_DATA_HOME/RetailPOS}
+ *       (default {@code ~/.local/share/RetailPOS}).
+ *       If the JVM system property {@code app.data.dir} is set (injected by
+ *       the launcher script), that path is used directly instead.</li>
+ *   <li><b>Windows</b> — uses {@code %LOCALAPPDATA%\RetailPOS}
+ *       (default {@code %USERPROFILE%\AppData\Local\RetailPOS}).</li>
+ *   <li><b>macOS</b> — uses {@code ~/Library/Application Support/RetailPOS}.</li>
+ * </ul>
+ */
 public final class AppPaths {
     private static final String APP_DIRECTORY = "RetailPOS";
 
     private AppPaths() { }
 
     public static Path dataDirectory() {
-        String localAppData = System.getenv("LOCALAPPDATA");
-        Path baseDirectory = localAppData == null || localAppData.isBlank()
-            ? Path.of(System.getProperty("user.home"), "AppData", "Local")
-            : Path.of(localAppData);
-        return baseDirectory.resolve(APP_DIRECTORY);
+        // Allow the launcher (or tests) to override via system property
+        String override = System.getProperty("app.data.dir");
+        if (override != null && !override.isBlank()) {
+            return Path.of(override);
+        }
+
+        String os = System.getProperty("os.name", "").toLowerCase();
+        String home = System.getProperty("user.home");
+
+        if (os.contains("win")) {
+            // Windows — %LOCALAPPDATA%\RetailPOS
+            String localAppData = System.getenv("LOCALAPPDATA");
+            Path base = (localAppData != null && !localAppData.isBlank())
+                    ? Path.of(localAppData)
+                    : Path.of(home, "AppData", "Local");
+            return base.resolve(APP_DIRECTORY);
+
+        } else if (os.contains("mac")) {
+            // macOS — ~/Library/Application Support/RetailPOS
+            return Path.of(home, "Library", "Application Support", APP_DIRECTORY);
+
+        } else {
+            // Linux / Unix — XDG Base Directory Specification
+            // $XDG_DATA_HOME defaults to ~/.local/share
+            String xdgDataHome = System.getenv("XDG_DATA_HOME");
+            Path base = (xdgDataHome != null && !xdgDataHome.isBlank())
+                    ? Path.of(xdgDataHome)
+                    : Path.of(home, ".local", "share");
+            return base.resolve(APP_DIRECTORY);
+        }
     }
 
     public static Path databaseFile() throws IOException {

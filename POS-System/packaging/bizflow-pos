@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# /usr/bin/bizflow-pos
+# Launcher for BizFlow POS System
+# Installed by the bizflow-pos Debian package.
+
+set -euo pipefail
+
+JAR="/usr/share/bizflow-pos/BizFlowPOS.jar"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/bizflow-pos"
+DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/RetailPOS"
+LOG_DIR="$DATA_DIR/logs"
+
+# Create per-user data directories on first run
+mkdir -p "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/images" \
+         "$DATA_DIR/receipts" "$LOG_DIR" "$CONFIG_DIR"
+
+# Copy the default application.properties into the user config dir on first run.
+# Users can edit this copy; the original in /etc/bizflow-pos is never modified.
+USER_PROPS="$CONFIG_DIR/application.properties"
+if [ ! -f "$USER_PROPS" ]; then
+    cp /etc/bizflow-pos/application.properties "$USER_PROPS"
+fi
+
+# Locate Java 21+.  Try JAVA_HOME first, then look for java21/openjdk-21
+# in common Debian/Ubuntu paths, then fall back to whatever 'java' is on PATH.
+find_java() {
+    local candidates=(
+        "${JAVA_HOME:-}/bin/java"
+        "/usr/lib/jvm/java-21-openjdk-amd64/bin/java"
+        "/usr/lib/jvm/java-21-openjdk-arm64/bin/java"
+        "/usr/lib/jvm/java-21-openjdk/bin/java"
+        "/usr/lib/jvm/temurin-21/bin/java"
+        "$(command -v java 2>/dev/null || true)"
+    )
+    for candidate in "${candidates[@]}"; do
+        [ -x "$candidate" ] || continue
+        local ver
+        ver=$("$candidate" -version 2>&1 | head -1 | sed 's/.*version "\([0-9]*\).*/\1/')
+        if [ "${ver:-0}" -ge 21 ] 2>/dev/null; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+JAVA_BIN=$(find_java) || {
+    echo "ERROR: Java 21 or later is required to run BizFlow POS." >&2
+    echo "Install it with:  sudo apt install openjdk-21-jre" >&2
+    # Show a graphical error if we're in a desktop session
+    if command -v zenity &>/dev/null; then
+        zenity --error --title="BizFlow POS" \
+               --text="Java 21 or later is required.\n\nInstall it with:\n  sudo apt install openjdk-21-jre"
+    elif command -v xmessage &>/dev/null; then
+        xmessage -center "BizFlow POS requires Java 21+.\n\nRun: sudo apt install openjdk-21-jre"
+    fi
+    exit 1
+}
+
+exec "$JAVA_BIN" \
+    -Xms128m \
+    -Xmx512m \
+    -Dapp.config="$USER_PROPS" \
+    -Dapp.data.dir="$DATA_DIR" \
+    -Dapp.log.dir="$LOG_DIR" \
+    -Djava.awt.headless=false \
+    -Dawt.useSystemAAFontSettings=on \
+    -Dswing.aatext=true \
+    -jar "$JAR" "$@"

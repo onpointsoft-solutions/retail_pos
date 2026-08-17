@@ -54,7 +54,7 @@ public class PaymentDialog extends JDialog {
 
     private void buildUI() {
         JPanel root = new JPanel(new BorderLayout(0, 0));
-        root.setBackground(Color.WHITE);
+        root.setBackground(RetailThemeManager.SURFACE);
         root.setBorder(new EmptyBorder(20, 24, 20, 24));
 
         // Header total
@@ -103,7 +103,7 @@ public class PaymentDialog extends JDialog {
 
     private JPanel buildCashTab() {
         JPanel p = new JPanel(new GridBagLayout());
-        p.setBackground(Color.WHITE);
+        p.setBackground(RetailThemeManager.CARD_BG);
         p.setBorder(new EmptyBorder(20, 10, 10, 10));
         GridBagConstraints g = new GridBagConstraints();
         g.gridx = 0; g.fill = GridBagConstraints.HORIZONTAL; g.weightx = 1; g.insets = new Insets(6, 0, 6, 0);
@@ -206,7 +206,7 @@ public class PaymentDialog extends JDialog {
 
     private JPanel buildSplitTab() {
         JPanel p = new JPanel(new GridBagLayout());
-        p.setBackground(Color.WHITE);
+        p.setBackground(RetailThemeManager.CARD_BG);
         p.setBorder(new EmptyBorder(12, 10, 10, 10));
         GridBagConstraints g = new GridBagConstraints();
         g.fill = GridBagConstraints.HORIZONTAL; g.weightx = 1; g.insets = new Insets(4, 0, 4, 0);

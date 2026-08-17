@@ -2,6 +2,8 @@ package com.retailpos.view;
 
 import com.retailpos.model.AppSettings;
 import com.retailpos.model.User;
+import com.retailpos.model.Category;
+import com.retailpos.repository.CategoryRepository;
 import com.retailpos.repository.SettingsRepository;
 import com.retailpos.repository.UserRepository;
 import com.retailpos.service.AuthService;
@@ -16,6 +18,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,6 +26,7 @@ public class SettingsPanel extends JPanel {
     private AppSettings settings;
     private final SettingsRepository settingsRepo = new SettingsRepository();
     private final UserRepository userRepo = new UserRepository();
+    private final CategoryRepository categoryRepo = new CategoryRepository();
 
     // Store fields
     private JTextField storeNameF, storeAddressF, storePhoneF, storeFooterF, logoPathF;
@@ -62,6 +66,7 @@ public class SettingsPanel extends JPanel {
         tabs.addTab("License", buildLicenseTab());
         tabs.addTab("Backup", buildBackupTab());
         tabs.addTab("Users", buildUsersTab());
+        tabs.addTab("Categories", buildCategoriesTab());
         add(tabs, BorderLayout.CENTER);
 
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -70,6 +75,38 @@ public class SettingsPanel extends JPanel {
         saveBtn.addActionListener(e -> saveSettings());
         footer.add(saveBtn);
         add(footer, BorderLayout.SOUTH);
+    }
+
+    private JPanel buildCategoriesTab() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBackground(RetailThemeManager.SURFACE); panel.setBorder(new EmptyBorder(16, 16, 16, 16));
+        DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Name", "Description"}, 0) {
+            @Override public boolean isCellEditable(int row, int column) { return false; }
+        };
+        JTable table = RetailThemeManager.styledTable(model);
+        Runnable reload = () -> new SwingWorker<List<Category>, Void>() {
+            @Override protected List<Category> doInBackground() throws Exception { return categoryRepo.findAll(); }
+            @Override protected void done() { try { model.setRowCount(0); for (Category c : get()) model.addRow(new Object[]{c.getId(), c.getName(), c.getDescription()}); } catch (Exception ignored) {} }
+        }.execute();
+        table.getColumnModel().getColumn(0).setMinWidth(0); table.getColumnModel().getColumn(0).setMaxWidth(0); table.getColumnModel().getColumn(0).setPreferredWidth(0);
+        reload.run(); panel.add(RetailThemeManager.scroll(table), BorderLayout.CENTER);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0)); actions.setOpaque(false);
+        JButton add = RetailThemeManager.primaryButton("Add Category", "add");
+        add.addActionListener(e -> {
+            JTextField name = RetailThemeManager.styledField(); JTextField description = RetailThemeManager.styledField();
+            JPanel form = new JPanel(new GridLayout(0, 1, 4, 4)); form.add(new JLabel("Category name *")); form.add(name); form.add(new JLabel("Description")); form.add(description);
+            if (JOptionPane.showConfirmDialog(this, form, "New Category", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) return;
+            if (name.getText().trim().isEmpty()) { JOptionPane.showMessageDialog(this, "Category name is required."); return; }
+            new SwingWorker<Void, Void>() { @Override protected Void doInBackground() throws Exception { Category c = new Category(); c.setId(UUID.randomUUID().toString()); c.setName(name.getText().trim()); c.setDescription(description.getText().trim()); categoryRepo.insert(c); return null; } @Override protected void done() { try { get(); reload.run(); } catch (Exception ex) { JOptionPane.showMessageDialog(SettingsPanel.this, "Could not save category: " + ex.getMessage()); } } }.execute();
+        });
+        JButton delete = RetailThemeManager.dangerButton("Delete Selected", "delete");
+        delete.addActionListener(e -> {
+            int row = table.getSelectedRow(); if (row < 0) { JOptionPane.showMessageDialog(this, "Select a category to delete."); return; }
+            String id = String.valueOf(model.getValueAt(row, 0)); String name = String.valueOf(model.getValueAt(row, 1));
+            if (JOptionPane.showConfirmDialog(this, "Delete category '" + name + "'?", "Confirm deletion", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) return;
+            new SwingWorker<Void, Void>() { @Override protected Void doInBackground() throws Exception { categoryRepo.deleteIfUnused(id); return null; } @Override protected void done() { try { get(); reload.run(); } catch (Exception ex) { JOptionPane.showMessageDialog(SettingsPanel.this, ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage(), "Cannot delete category", JOptionPane.WARNING_MESSAGE); } } }.execute();
+        });
+        actions.add(add); actions.add(delete); panel.add(actions, BorderLayout.SOUTH); return panel;
     }
 
     private JPanel buildLicenseTab() {
@@ -203,7 +240,8 @@ public class SettingsPanel extends JPanel {
         darkCb.setSelected(settings.isDarkMode());
         darkCb.addActionListener(e -> {
             settings.setDarkMode(darkCb.isSelected());
-            RetailThemeManager.getInstance().apply(darkCb.isSelected());
+            Window owner = SwingUtilities.getWindowAncestor(SettingsPanel.this);
+            RetailThemeManager.getInstance().applyWithOverlay(darkCb.isSelected(), owner);
         });
         darkModeCb = darkCb;
         p.add(darkCb, g);
@@ -333,10 +371,10 @@ public class SettingsPanel extends JPanel {
 
     private JPanel buildUsersTab() {
         JPanel p = new JPanel(new BorderLayout(0, 8));
-        p.setBackground(Color.WHITE);
+        p.setBackground(RetailThemeManager.SURFACE);
         p.setBorder(new EmptyBorder(16, 16, 16, 16));
 
-        String[] cols = {"Username", "Full Name", "Role", "Active"};
+        String[] cols = {"ID", "Username", "Full Name", "Role", "Active"};
         DefaultTableModel model = new DefaultTableModel(cols, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
@@ -347,10 +385,11 @@ public class SettingsPanel extends JPanel {
             @Override protected void done() {
                 try {
                     for (User u : get())
-                        model.addRow(new Object[]{u.getUsername(), u.getFullName(), u.getRole(), u.isActive() ? "Yes" : "No"});
+                        model.addRow(new Object[]{u.getId(), u.getUsername(), u.getFullName(), u.getRole(), u.isActive() ? "Yes" : "No"});
                 } catch (Exception ignored) {}
             }
         }.execute();
+        userTable.getColumnModel().getColumn(0).setMinWidth(0); userTable.getColumnModel().getColumn(0).setMaxWidth(0); userTable.getColumnModel().getColumn(0).setPreferredWidth(0);
 
         p.add(RetailThemeManager.scroll(userTable), BorderLayout.CENTER);
 
@@ -359,15 +398,18 @@ public class SettingsPanel extends JPanel {
         JButton addUser = RetailThemeManager.primaryButton("Add User", "add");
         addUser.addActionListener(e -> showAddUserDialog(model));
         btns.add(addUser);
+        JButton resetPassword = RetailThemeManager.secondaryButton("Reset Password", "edit");
+        resetPassword.addActionListener(e -> resetUserPassword(userTable, model));
+        btns.add(resetPassword);
         p.add(btns, BorderLayout.SOUTH);
         return p;
     }
 
     private void showAddUserDialog(DefaultTableModel model) {
         JDialog d = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Add User", true);
-        d.setSize(440, 360); d.setLocationRelativeTo(this);
+        d.setSize(460, 500); d.setLocationRelativeTo(this);
         JPanel form = new JPanel(new GridBagLayout());
-        form.setBackground(Color.WHITE);
+        form.setBackground(RetailThemeManager.CARD_BG);
         form.setBorder(new EmptyBorder(16, 20, 16, 20));
         GridBagConstraints g = new GridBagConstraints();
         g.fill = GridBagConstraints.HORIZONTAL; g.weightx = 1; g.insets = new Insets(4, 0, 4, 0);
@@ -379,7 +421,13 @@ public class SettingsPanel extends JPanel {
         g.gridy = 4; form.add(boldLabel("Password:"), g);
         g.gridy = 5; JPasswordField passF = RetailThemeManager.styledPasswordField(); passF.setPreferredSize(new Dimension(340, 36)); form.add(passF, g);
         g.gridy = 6; form.add(boldLabel("Role:"), g);
-        g.gridy = 7; JComboBox<String> roleCombo = new JComboBox<>(new String[]{"CASHIER", "ADMIN"}); form.add(roleCombo, g);
+        g.gridy = 7; JComboBox<String> roleCombo = new JComboBox<>(new String[]{"CASHIER", "MANAGER", "ADMIN"}); form.add(roleCombo, g);
+        g.gridy = 8; form.add(boldLabel("Additional permissions:"), g);
+        JPanel permissionsPanel = new JPanel(new GridLayout(0, 2, 8, 4)); permissionsPanel.setOpaque(false);
+        String[] permissionNames = {"MANAGE_PRODUCTS", "MANAGE_CUSTOMERS", "MANAGE_INVENTORY", "MANAGE_PURCHASES", "MANAGE_SERVICES", "VIEW_REPORTS", "MANAGE_USERS"};
+        java.util.List<JCheckBox> permissionChecks = new ArrayList<>();
+        for (String permission : permissionNames) { JCheckBox box = new JCheckBox(permission.replace('_', ' ')); box.setOpaque(false); permissionChecks.add(box); permissionsPanel.add(box); }
+        g.gridy = 9; form.add(permissionsPanel, g);
 
         d.add(form, BorderLayout.CENTER);
         JPanel acts = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -395,10 +443,14 @@ public class SettingsPanel extends JPanel {
                 JOptionPane.showMessageDialog(d, "Username and password are required"); return;
             }
             new SwingWorker<Void, Void>() {
+                String createdId;
                 @Override protected Void doInBackground() throws Exception {
                     User u = new User();
                     u.setId(UUID.randomUUID().toString()); u.setUsername(username);
+                    createdId = u.getId();
                     u.setPasswordHash(PasswordUtil.hash(password)); u.setRole(role);
+                    u.setPermissions(permissionChecks.stream().filter(JCheckBox::isSelected)
+                        .map(box -> box.getText().replace(' ', '_')).collect(java.util.stream.Collectors.joining(",")));
                     u.setFullName(fullName.isEmpty() ? username : fullName);
                     u.setActive(true); u.setCreatedAt(LocalDateTime.now()); u.setUpdatedAt(LocalDateTime.now());
                     userRepo.insert(u);
@@ -407,7 +459,7 @@ public class SettingsPanel extends JPanel {
                     return null;
                 }
                 @Override protected void done() {
-                    try { get(); d.dispose(); model.addRow(new Object[]{username, fullName, role, "Yes"}); }
+                    try { get(); d.dispose(); model.addRow(new Object[]{createdId, username, fullName, role, "Yes"}); }
                     catch (Exception ex) { JOptionPane.showMessageDialog(d, "Error: " + ex.getMessage()); }
                 }
             }.execute();
@@ -415,6 +467,25 @@ public class SettingsPanel extends JPanel {
         acts.add(cancel); acts.add(save);
         d.add(acts, BorderLayout.SOUTH);
         d.setVisible(true);
+    }
+
+    private void resetUserPassword(JTable table, DefaultTableModel model) {
+        int row = table.getSelectedRow();
+        if (row < 0) { JOptionPane.showMessageDialog(this, "Select a user first."); return; }
+        String userId = String.valueOf(model.getValueAt(row, 0));
+        String username = String.valueOf(model.getValueAt(row, 1));
+        JPasswordField password = RetailThemeManager.styledPasswordField();
+        JPasswordField confirm = RetailThemeManager.styledPasswordField();
+        JPanel form = new JPanel(new GridLayout(0, 1, 5, 5));
+        form.add(new JLabel("New password for " + username)); form.add(password); form.add(new JLabel("Confirm password")); form.add(confirm);
+        if (JOptionPane.showConfirmDialog(this, form, "Reset Password", JOptionPane.OK_CANCEL_OPTION) != JOptionPane.OK_OPTION) return;
+        String value = new String(password.getPassword());
+        if (value.length() < 8) { JOptionPane.showMessageDialog(this, "Password must be at least 8 characters."); return; }
+        if (!value.equals(new String(confirm.getPassword()))) { JOptionPane.showMessageDialog(this, "Passwords do not match."); return; }
+        new SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() throws Exception { userRepo.updatePassword(userId, PasswordUtil.hash(value)); return null; }
+            @Override protected void done() { try { get(); JOptionPane.showMessageDialog(SettingsPanel.this, "Password reset successfully for " + username + "."); } catch (Exception ex) { JOptionPane.showMessageDialog(SettingsPanel.this, "Could not reset password: " + ex.getMessage()); } }
+        }.execute();
     }
 
     private void saveSettings() {
@@ -507,14 +578,14 @@ public class SettingsPanel extends JPanel {
     // Helpers
     private JPanel formPanel() {
         JPanel p = new JPanel(new GridBagLayout());
-        p.setBackground(Color.WHITE);
+        p.setBackground(RetailThemeManager.CARD_BG);
         p.setBorder(new EmptyBorder(16, 16, 16, 16));
         return p;
     }
 
     private JPanel wrap(JPanel p) {
         JScrollPane sp = new JScrollPane(p); sp.setBorder(null);
-        JPanel w = new JPanel(new BorderLayout()); w.setBackground(Color.WHITE); w.add(sp); return w;
+        JPanel w = new JPanel(new BorderLayout()); w.setBackground(RetailThemeManager.CARD_BG); w.add(sp); return w;
     }
 
     private JTextField row(JPanel p, int rowIndex, String label) {

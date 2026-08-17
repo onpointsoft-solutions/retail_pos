@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.retailpos.model.AppSettings;
 import com.retailpos.repository.SettingsRepository;
+import com.retailpos.service.ProductService;
 import com.retailpos.util.AuditLogger;
 import com.retailpos.util.DatabaseManager;
 import java.io.*;
@@ -43,9 +44,12 @@ public class SyncService {
     private final Gson gson = new GsonBuilder().create();
     private final Map<String, Set<String>> columnCache = new ConcurrentHashMap<>();
 
+    private final AtomicBoolean syncInProgress = new AtomicBoolean(false);
     private int retryCount = 0;
     private static final int MAX_RETRIES     = 5;
-    private static final int POLL_INTERVAL_S = 30;
+    // Short incremental polling gives branches near-real-time visibility while
+    // batching keeps the server load predictable for large estates.
+    private static final int POLL_INTERVAL_S = 2;
     private static final int CONNECT_TIMEOUT = 6_000;
     private static final int READ_TIMEOUT    = 120_000;
     private static final int UPLOAD_BATCH_SIZE = 1000;
@@ -56,7 +60,7 @@ public class SyncService {
     private static final String[] SYNC_ORDER = {
         "categories", "suppliers", "customers", "users", "products",
         "product_images", "purchase_orders", "sales", "inventory_movements",
-        "mpesa_transactions"
+        "mpesa_transactions", "job_cards", "quotations"
     };
 
     private SyncService() {}
@@ -75,7 +79,7 @@ public class SyncService {
             t.setDaemon(true);
             return t;
         });
-        scheduler.scheduleAtFixedRate(this::checkAndSync, 10, POLL_INTERVAL_S, TimeUnit.SECONDS);
+        scheduler.scheduleWithFixedDelay(this::checkAndSync, 2, POLL_INTERVAL_S, TimeUnit.SECONDS);
     }
 
     public void stop() {
@@ -88,6 +92,18 @@ public class SyncService {
         t.setDaemon(true); t.start();
     }
 
+    /**
+     * Requests an immediate incremental sync after a committed local business
+     * event. It honours the Auto Sync setting and is coalesced by the sync lock.
+     */
+    public void notifyLocalChange() {
+        try {
+            if (settingsRepo.load().isAutoSync()) triggerSync();
+        } catch (Exception ignored) {
+            // The scheduled pass will retry once settings/database access recovers.
+        }
+    }
+
     public SyncState     getState()        { return state; }
     public String        getStateMessage() { return stateMessage; }
     public LocalDateTime getLastSyncTime() { return lastSyncTime; }
@@ -98,7 +114,7 @@ public class SyncService {
     // ── Core logic ────────────────────────────────────────────────────────────
 
     private void checkAndSync() {
-        if (state == SyncState.SYNCING) return;
+        if (syncInProgress.get()) return;
         try {
             AppSettings s = settingsRepo.load();
             if (!s.isAutoSync()) return;
@@ -115,7 +131,9 @@ public class SyncService {
 
     @SuppressWarnings("unchecked")
     private void performSync() {
-        if (state == SyncState.SYNCING) return;
+        // Manual requests and the scheduler can arrive simultaneously. This
+        // guard guarantees a single cursor owner and prevents duplicate uploads.
+        if (!syncInProgress.compareAndSet(false, true)) return;
         setState(SyncState.SYNCING, "Synchronising…");
         try {
             AppSettings settings = settingsRepo.load();
@@ -173,6 +191,8 @@ public class SyncService {
             } else {
                 setState(SyncState.ERROR, "Sync error (retry " + retryCount + "): " + msg);
             }
+        } finally {
+            syncInProgress.set(false);
         }
     }
 
@@ -354,7 +374,7 @@ public class SyncService {
                 Map<String, List<Map<String, Object>>> allItems = fetchAllChildRows("sale_items", "sale_id", saleIds);
                 for (Map<String, Object> row : rows) {
                     String id = String.valueOf(row.get("id"));
-                    if (allItems.containsKey(id)) row.put("items", allItems.get(id));
+                    row.put("items", allItems.getOrDefault(id, Collections.emptyList()));
                 }
             }
             if ("purchase_orders".equals(entityType)) {
@@ -362,7 +382,21 @@ public class SyncService {
                 Map<String, List<Map<String, Object>>> allItems = fetchAllChildRows("purchase_order_items", "po_id", poIds);
                 for (Map<String, Object> row : rows) {
                     String id = String.valueOf(row.get("id"));
-                    if (allItems.containsKey(id)) row.put("items", allItems.get(id));
+                    row.put("items", allItems.getOrDefault(id, Collections.emptyList()));
+                }
+            }
+            if ("job_cards".equals(entityType)) {
+                Set<String> jobIds = rows.stream().map(r -> String.valueOf(r.get("id"))).collect(java.util.stream.Collectors.toSet());
+                Map<String, List<Map<String, Object>>> allItems = fetchAllChildRows("job_card_service_items", "job_card_id", jobIds);
+                for (Map<String, Object> row : rows) {
+                    row.put("items", allItems.getOrDefault(String.valueOf(row.get("id")), Collections.emptyList()));
+                }
+            }
+            if ("quotations".equals(entityType)) {
+                Set<String> quotationIds = rows.stream().map(r -> String.valueOf(r.get("id"))).collect(java.util.stream.Collectors.toSet());
+                Map<String, List<Map<String, Object>>> allItems = fetchAllChildRows("quotation_items", "quotation_id", quotationIds);
+                for (Map<String, Object> row : rows) {
+                    row.put("items", allItems.getOrDefault(String.valueOf(row.get("id")), Collections.emptyList()));
                 }
             }
         } catch (Exception e) {
@@ -644,16 +678,22 @@ public class SyncService {
                 }
                 if ("sales".equals(entityType)) upsertChildRecords("sale_items", "sale_id", id, rec.get("items"));
                 if ("purchase_orders".equals(entityType)) upsertChildRecords("purchase_order_items", "po_id", id, rec.get("items"));
+                if ("job_cards".equals(entityType)) upsertChildRecords("job_card_service_items", "job_card_id", id, rec.get("items"));
+                if ("quotations".equals(entityType)) upsertChildRecords("quotation_items", "quotation_id", id, rec.get("items"));
             } catch (Exception e) {
                 throw new IllegalStateException(
                     "Could not apply " + entityType + " record " + rec.get("id"), e);
             }
         }
+        // ProductService intentionally caches catalogue data. Clear it as soon
+        // as synced product rows are applied so another cashier sees fresh stock
+        // on their next lookup instead of waiting for the cache TTL.
+        if ("products".equals(entityType)) ProductService.getInstance().invalidateCache();
     }
 
     @SuppressWarnings("unchecked")
     private void upsertChildRecords(String table, String parentColumn, String parentId, Object rawItems) {
-        if (!(rawItems instanceof List<?> items) || items.isEmpty()) return;
+        if (!(rawItems instanceof List<?> items)) return;
         Set<String> localColumns = getLocalColumns(table);
         if (localColumns.isEmpty()) return;
 

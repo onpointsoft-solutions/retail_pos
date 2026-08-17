@@ -7,6 +7,8 @@ public class User {
     private String username;
     private String passwordHash;
     private String role; // "ADMIN" / "CASHIER"
+    /** Comma-separated explicit permissions; empty means the role default. */
+    private String permissions;
     private String fullName;
     private boolean active;
     private int failedLoginAttempts;
@@ -25,6 +27,8 @@ public class User {
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+    public String getPermissions() { return permissions; }
+    public void setPermissions(String permissions) { this.permissions = permissions; }
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
     public boolean isActive() { return active; }
@@ -42,6 +46,11 @@ public class User {
 
     public boolean isAdmin() { return "ADMIN".equals(role); }
     public boolean isCashier() { return "CASHIER".equals(role); }
+    public boolean hasExplicitPermission(String permission) {
+        if (permissions == null || permissions.isBlank()) return false;
+        return java.util.Arrays.stream(permissions.split(","))
+            .map(String::trim).anyMatch(permission::equalsIgnoreCase);
+    }
     public boolean isLockedOut() {
         return lockoutUntil != null && LocalDateTime.now().isBefore(lockoutUntil);
     }

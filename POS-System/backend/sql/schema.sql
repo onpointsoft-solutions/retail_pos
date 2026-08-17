@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     username              VARCHAR(64)   NOT NULL,
     password_hash         VARCHAR(255)  NOT NULL,
     role                  VARCHAR(20)   NOT NULL DEFAULT 'CASHIER',
+    permissions           TEXT          NULL,
     full_name             VARCHAR(150)  NULL,
     active                TINYINT(1)    NOT NULL DEFAULT 1,
     failed_login_attempts INT           NOT NULL DEFAULT 0,
@@ -288,6 +289,51 @@ CREATE TABLE IF NOT EXISTS mpesa_transactions (
     INDEX idx_mpesa_received_at (received_at),
     INDEX idx_mpesa_sync_status (sync_status),
     INDEX idx_mpesa_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Service job cards and quotations ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS job_cards (
+    id VARCHAR(36) NOT NULL, job_number VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(36) NULL, customer_name VARCHAR(150) NOT NULL, customer_phone VARCHAR(30) NULL,
+    asset_description TEXT NOT NULL, asset_serial VARCHAR(100) NULL, problem_description TEXT NOT NULL,
+    diagnosis TEXT NULL, resolution TEXT NULL, technician_id VARCHAR(36) NULL, technician_name VARCHAR(150) NULL,
+    labour_charge DECIMAL(12,2) NOT NULL DEFAULT 0.00, status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
+    active_quotation_id VARCHAR(36) NULL, due_date DATETIME NULL, sync_status VARCHAR(20) NOT NULL DEFAULT 'SYNCED',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id), UNIQUE KEY uq_job_cards_number (job_number),
+    INDEX idx_job_cards_status (status), INDEX idx_job_cards_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS job_card_service_items (
+    id VARCHAR(36) NOT NULL, job_card_id VARCHAR(36) NOT NULL, description TEXT NOT NULL,
+    charge DECIMAL(12,2) NOT NULL DEFAULT 0.00, quantity INT NOT NULL DEFAULT 1,
+    PRIMARY KEY (id), INDEX idx_jcsi_job_card_id (job_card_id),
+    CONSTRAINT fk_jcsi_job_card FOREIGN KEY (job_card_id) REFERENCES job_cards(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS quotations (
+    id VARCHAR(36) NOT NULL, quotation_number VARCHAR(50) NOT NULL, job_card_id VARCHAR(36) NOT NULL,
+    job_card_number VARCHAR(50) NULL, invoice_sale_id VARCHAR(36) NULL, customer_id VARCHAR(36) NULL,
+    customer_name VARCHAR(150) NOT NULL, customer_phone VARCHAR(30) NULL,
+    subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00, discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00, labour_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    grand_total DECIMAL(12,2) NOT NULL DEFAULT 0.00, notes TEXT NULL, status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+    created_by_id VARCHAR(36) NULL, created_by_name VARCHAR(150) NULL, valid_until DATETIME NULL,
+    sync_status VARCHAR(20) NOT NULL DEFAULT 'SYNCED',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id), UNIQUE KEY uq_quotations_number (quotation_number),
+    INDEX idx_quotations_job_card_id (job_card_id), INDEX idx_quotations_updated_at (updated_at),
+    CONSTRAINT fk_quotation_job_card FOREIGN KEY (job_card_id) REFERENCES job_cards(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS quotation_items (
+    id VARCHAR(36) NOT NULL, quotation_id VARCHAR(36) NOT NULL, product_id VARCHAR(36) NULL,
+    product_name VARCHAR(255) NOT NULL, product_sku VARCHAR(50) NULL, quantity INT NOT NULL DEFAULT 1,
+    unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00, buying_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    discount DECIMAL(12,2) NOT NULL DEFAULT 0.00, tax_rate DECIMAL(6,2) NOT NULL DEFAULT 0.00,
+    line_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    PRIMARY KEY (id), INDEX idx_quotation_items_quotation_id (quotation_id),
+    CONSTRAINT fk_quotation_item FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── App Settings ──────────────────────────────────────────────────────────────

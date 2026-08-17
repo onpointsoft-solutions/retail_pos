@@ -54,6 +54,22 @@ class SyncController
                          'expected_delivery_date',
                          'sync_status', 'created_at', 'updated_at'],
         ],
+        'job_cards' => [
+            'table'  => 'job_cards',
+            'fields' => ['job_number', 'customer_id', 'customer_name', 'customer_phone',
+                         'asset_description', 'asset_serial', 'problem_description', 'diagnosis',
+                         'resolution', 'technician_id', 'technician_name', 'labour_charge',
+                         'status', 'active_quotation_id', 'due_date', 'sync_status',
+                         'created_at', 'updated_at'],
+        ],
+        'quotations' => [
+            'table'  => 'quotations',
+            'fields' => ['quotation_number', 'job_card_id', 'job_card_number', 'invoice_sale_id',
+                         'customer_id', 'customer_name', 'customer_phone', 'subtotal',
+                         'discount_amount', 'tax_amount', 'labour_total', 'grand_total', 'notes',
+                         'status', 'created_by_id', 'created_by_name', 'valid_until', 'sync_status',
+                         'created_at', 'updated_at'],
+        ],
         'inventory_movements' => [
             'table'  => 'inventory_movements',
             'fields' => ['product_id', 'product_name', 'type', 'quantity',
@@ -67,7 +83,7 @@ class SyncController
         ],
         'users' => [
             'table'  => 'users',
-            'fields' => ['username', 'password_hash', 'role', 'full_name', 'active',
+            'fields' => ['username', 'password_hash', 'role', 'permissions', 'full_name', 'active',
                          'sync_status', 'created_at', 'updated_at'],
         ],
         'settings' => [
@@ -235,28 +251,17 @@ class SyncController
         $stmt->execute();
         $records = $stmt->fetchAll();
 
-        // For sales, attach items
-        if ($entityType === 'sales') {
-            foreach ($records as &$sale) {
-                $iStmt = $this->db->prepare(
-                    'SELECT * FROM sale_items WHERE business_id = ? AND sale_id = ?'
-                );
-                $iStmt->execute([$businessId, $sale['id']]);
-                $sale['items'] = $iStmt->fetchAll();
-            }
-            unset($sale);
-        }
-
-        // For purchase orders, attach items — FK column is `po_id`
-        if ($entityType === 'purchase_orders') {
-            foreach ($records as &$order) {
-                $iStmt = $this->db->prepare(
-                    'SELECT * FROM purchase_order_items WHERE business_id = ? AND po_id = ?'
-                );
-                $iStmt->execute([$businessId, $order['id']]);
-                $order['items'] = $iStmt->fetchAll();
-            }
-            unset($order);
+        // Attach children in one query per page; this avoids an N+1 query for
+        // large sales, service-job, and purchase-order synchronizations.
+        $children = [
+            'sales' => ['sale_items', 'sale_id'],
+            'purchase_orders' => ['purchase_order_items', 'po_id'],
+            'job_cards' => ['job_card_service_items', 'job_card_id'],
+            'quotations' => ['quotation_items', 'quotation_id'],
+        ];
+        if (isset($children[$entityType])) {
+            [$childTable, $foreignKey] = $children[$entityType];
+            $this->attachChildRecords($records, $childTable, $foreignKey, $businessId);
         }
 
         Response::json([
@@ -284,6 +289,8 @@ class SyncController
             'inventory_movements'  => 'inventory_movements',
             'users'                => 'users',
             'mpesa_transactions'   => 'mpesa_transactions',
+            'job_cards'            => 'job_cards',
+            'quotations'           => 'quotations',
         ];
 
         $counts = [];
@@ -291,7 +298,7 @@ class SyncController
         $tablesWithDelete = ['products','sales','customers','suppliers',
                              'purchase_orders','users'];
         // Tables without deleted_at
-        $tablesNoDelete   = ['inventory_movements','categories','mpesa_transactions'];
+        $tablesNoDelete   = ['inventory_movements','categories','mpesa_transactions','job_cards','quotations'];
 
         foreach ($entities as $name => $table) {
             try {
@@ -498,6 +505,67 @@ class SyncController
         $stmt->execute($values);
     }
 
+    private function replaceJobCardServiceItems(string $jobCardId, array $items, string $businessId): void
+    {
+        $this->replaceChildRows(
+            'job_card_service_items', 'job_card_id', $jobCardId, $items, $businessId,
+            ['description', 'charge', 'quantity']
+        );
+    }
+
+    private function replaceQuotationItems(string $quotationId, array $items, string $businessId): void
+    {
+        $this->replaceChildRows(
+            'quotation_items', 'quotation_id', $quotationId, $items, $businessId,
+            ['product_id', 'product_name', 'product_sku', 'quantity', 'unit_price',
+             'buying_price', 'discount', 'tax_rate', 'line_total']
+        );
+    }
+
+    /** Replaces a parent record's child lines with one bulk database operation. */
+    private function replaceChildRows(
+        string $table, string $foreignKey, string $parentId, array $items,
+        string $businessId, array $fields
+    ): void {
+        $delete = $this->db->prepare("DELETE FROM {$table} WHERE business_id = ? AND {$foreignKey} = ?");
+        $delete->execute([$businessId, $parentId]);
+        if (!$items) return;
+
+        $columns = array_merge(['id', 'business_id', $foreignKey], $fields);
+        $rowMarks = '(' . implode(', ', array_fill(0, count($columns), '?')) . ')';
+        $marks = [];
+        $values = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) continue;
+            $marks[] = $rowMarks;
+            $values[] = $item['id'] ?? $this->uuid();
+            $values[] = $businessId;
+            $values[] = $parentId;
+            foreach ($fields as $field) $values[] = $item[$field] ?? null;
+        }
+        if (!$marks) return;
+        $sql = 'INSERT INTO ' . $table . ' (`' . implode('`,`', $columns) . '`) VALUES '
+            . implode(', ', $marks);
+        $this->db->prepare($sql)->execute($values);
+    }
+
+    /** Adds child lines to an entire download page with a single indexed query. */
+    private function attachChildRecords(array &$records, string $table, string $foreignKey, string $businessId): void
+    {
+        if (!$records) return;
+        $ids = array_values(array_filter(array_column($records, 'id')));
+        if (!$ids) return;
+        $marks = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $this->db->prepare(
+            "SELECT * FROM {$table} WHERE business_id = ? AND {$foreignKey} IN ({$marks})"
+        );
+        $stmt->execute(array_merge([$businessId], $ids));
+        $byParent = [];
+        while ($child = $stmt->fetch()) $byParent[$child[$foreignKey]][] = $child;
+        foreach ($records as &$record) $record['items'] = $byParent[$record['id']] ?? [];
+        unset($record);
+    }
+
     private function normalizeRecordDates(array $record): array
     {
         foreach ($record as $key => $value) {
@@ -559,6 +627,15 @@ class SyncController
             while ($row = $chk->fetch()) {
                 $existingRecords[$row['id']] = $row;
             }
+            // Ownership is checked once per batch, not once per row. UUIDs are
+            // global identifiers, so this preserves tenant isolation without an
+            // N+1 query under heavy upload traffic.
+            $ownerCheck = $this->db->prepare(
+                "SELECT id, business_id FROM {$table} WHERE id IN ({$placeholders})"
+            );
+            $ownerCheck->execute($ids);
+            $owners = [];
+            while ($row = $ownerCheck->fetch()) $owners[$row['id']] = (string)$row['business_id'];
 
             // Prepare bulk INSERT statement
             $insertFields = ['id', 'business_id'];
@@ -591,17 +668,12 @@ class SyncController
             // Process records
             foreach ($records as $record) {
                 $id = $record['id'];
-                $ownerCheck = $this->db->prepare(
-                    "SELECT business_id FROM {$table} WHERE id = ? LIMIT 1"
-                );
-                $ownerCheck->execute([$id]);
-                $existingOwner = $ownerCheck->fetchColumn();
-                if ($existingOwner !== false && (string)$existingOwner !== $businessId) {
+                if (isset($owners[$id]) && $owners[$id] !== $businessId) {
                     $conflicts[] = ['id' => $id, 'reason' => 'Record belongs to another business'];
                     continue;
                 }
                 $items = [];
-                if (($entityType === 'sales' || $entityType === 'purchase_orders')
+                if (in_array($entityType, ['sales', 'purchase_orders', 'job_cards', 'quotations'], true)
                     && isset($record['items']) && is_array($record['items'])) {
                     $items = $record['items'];
                     unset($record['items']);
@@ -640,6 +712,10 @@ class SyncController
                     $this->replaceSaleItems($id, $items, $businessId);
                 } elseif ($entityType === 'purchase_orders') {
                     $this->replacePurchaseOrderItems($id, $items, $businessId);
+                } elseif ($entityType === 'job_cards') {
+                    $this->replaceJobCardServiceItems($id, $items, $businessId);
+                } elseif ($entityType === 'quotations') {
+                    $this->replaceQuotationItems($id, $items, $businessId);
                 }
 
                 if (isset($existingRecords[$id])) {

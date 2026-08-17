@@ -37,8 +37,8 @@ public class SetupWizard extends JDialog {
     public SetupWizard(Frame parent) {
         super(parent, "Welcome to BizFlow POS", true);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
-        setMinimumSize(new Dimension(720, 760));
-        setSize(780, 860);
+        setMinimumSize(new Dimension(760, 560));
+        setSize(840, 620);
         setLocationRelativeTo(parent);
         defaultFieldBorder = RetailThemeManager.styledField().getBorder();
         addWindowListener(new WindowAdapter() {
@@ -54,63 +54,60 @@ public class SetupWizard extends JDialog {
     public boolean isSetupComplete() { return setupComplete; }
 
     private void buildUi() {
-        JPanel content = new JPanel();
-        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
-        content.setBackground(RetailThemeManager.SURFACE);
-        content.setBorder(new EmptyBorder(26, 36, 26, 36));
+        JPanel root = new JPanel(new BorderLayout(0, 0));
+        root.setBackground(RetailThemeManager.SURFACE);
 
-        JLabel title = RetailThemeManager.headerLabel("Set up your retail workspace");
-        title.setAlignmentX(Component.LEFT_ALIGNMENT);
-        content.add(title);
-        JLabel subtitle = RetailThemeManager.subLabel("This takes a minute. You can refine these settings later.");
-        subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
-        content.add(Box.createVerticalStrut(4)); content.add(subtitle); content.add(Box.createVerticalStrut(18));
+        JPanel header = new JPanel();
+        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+        header.setBackground(RetailThemeManager.NAVY);
+        header.setBorder(new EmptyBorder(20, 28, 18, 28));
+        JLabel title = new JLabel("Welcome to BizFlow POS");
+        title.setForeground(Color.WHITE); title.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        JLabel subtitle = new JLabel("A quick three-step setup for your business workspace.");
+        subtitle.setForeground(new Color(191, 219, 254)); subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        header.add(title); header.add(Box.createVerticalStrut(4)); header.add(subtitle);
+        root.add(header, BorderLayout.NORTH);
 
-        // --- Store details ---
-        JPanel storeCard = section("Store details", "Shown on receipts and throughout the POS.");
+        JTabbedPane steps = new JTabbedPane();
+        steps.setBorder(new EmptyBorder(12, 22, 0, 22));
+        steps.setFont(new Font("Segoe UI", Font.BOLD, 13));
+
+        JPanel storeCard = section("1. Your store", "The details printed on receipts and used across the system.");
         JTextField shopName = (JTextField) addField(storeCard, "Shop name *", false);
         JTextField address = (JTextField) addField(storeCard, "Shop address", false);
         JTextField phone = (JTextField) addField(storeCard, "Shop phone", false);
         JTextField logoPath = (JTextField) addField(storeCard, "Store logo", true);
-
-        JPanel logoRow = new JPanel();
-        logoRow.setLayout(new BoxLayout(logoRow, BoxLayout.X_AXIS));
-        logoRow.setOpaque(false);
-        logoRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JButton uploadLogo = RetailThemeManager.secondaryButton("Upload logo");
-        JLabel logoPreview = new JLabel();
-        logoPreview.setPreferredSize(new Dimension(48, 48));
-        logoPreview.setBorder(new LineBorder(new Color(0, 0, 0, 30), 1));
-        logoRow.add(uploadLogo);
-        logoRow.add(Box.createHorizontalStrut(10));
-        logoRow.add(logoPreview);
-        storeCard.add(logoRow);
+        JPanel logoRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        logoRow.setOpaque(false); logoRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JButton uploadLogo = RetailThemeManager.secondaryButton("Choose logo", "edit");
+        JLabel logoPreview = new JLabel("Optional"); logoPreview.setForeground(RetailThemeManager.TEXT_MUTED);
+        logoPreview.setPreferredSize(new Dimension(70, 40));
+        logoPreview.setBorder(new LineBorder(RetailThemeManager.BORDER, 1, true));
+        logoRow.add(uploadLogo); logoRow.add(logoPreview); storeCard.add(logoRow);
         uploadLogo.addActionListener(e -> chooseLogo(logoPath, logoPreview));
         formControls.add(uploadLogo);
-        content.add(storeCard); content.add(Box.createVerticalStrut(14));
+        steps.addTab("Store", new JScrollPane(storeCard) {{ setBorder(null); getViewport().setBackground(RetailThemeManager.SURFACE); }});
 
-        // --- Appearance ---
-        JPanel brandCard = section("Appearance", "Choose a primary brand color and display mode.");
+        JPanel brandCard = section("2. Make it yours", "Choose an appearance that works best for your team.");
         JComboBox<String> primaryColor = new JComboBox<>(COLOR_OPTIONS);
-        primaryColor.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
-        primaryColor.setRenderer(new ColorSwatchRenderer());
-        brandCard.add(new JLabel("Primary color")); brandCard.add(Box.createVerticalStrut(4)); brandCard.add(primaryColor);
+        primaryColor.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42)); primaryColor.setRenderer(new ColorSwatchRenderer());
+        JLabel colorLabel = new JLabel("Primary colour"); colorLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        colorLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        brandCard.add(colorLabel); brandCard.add(Box.createVerticalStrut(5)); brandCard.add(primaryColor);
         JCheckBox darkMode = new JCheckBox("Use dark mode"); darkMode.setOpaque(false); darkMode.setAlignmentX(Component.LEFT_ALIGNMENT);
-        brandCard.add(Box.createVerticalStrut(10)); brandCard.add(darkMode);
+        brandCard.add(Box.createVerticalStrut(16)); brandCard.add(darkMode);
         formControls.add(primaryColor); formControls.add(darkMode);
-        content.add(brandCard); content.add(Box.createVerticalStrut(14));
+        steps.addTab("Appearance", new JScrollPane(brandCard) {{ setBorder(null); getViewport().setBackground(RetailThemeManager.SURFACE); }});
 
-        // --- Administrator account ---
-        JPanel adminCard = section("Administrator account", "Use these credentials to sign in after setup.");
+        JPanel adminCard = section("3. Secure your workspace", "Create the administrator account used to manage the POS.");
         JTextField adminName = (JTextField) addField(adminCard, "Administrator name *", false);
         JTextField username = (JTextField) addField(adminCard, "Username *", false);
         JPasswordField password = addPasswordField(adminCard, "Password (at least 8 characters) *");
-        JLabel strengthHint = smallHint(" ");
-        adminCard.add(strengthHint); adminCard.add(Box.createVerticalStrut(6));
+        JLabel strengthHint = smallHint(" "); adminCard.add(strengthHint); adminCard.add(Box.createVerticalStrut(6));
         JPasswordField confirmation = addPasswordField(adminCard, "Confirm password *");
-        JLabel matchHint = smallHint(" ");
-        adminCard.add(matchHint);
-        content.add(adminCard); content.add(Box.createVerticalStrut(12));
+        JLabel matchHint = smallHint(" "); adminCard.add(matchHint);
+        steps.addTab("Administrator", new JScrollPane(adminCard) {{ setBorder(null); getViewport().setBackground(RetailThemeManager.SURFACE); }});
+        root.add(steps, BorderLayout.CENTER);
 
         password.getDocument().addDocumentListener(onChange(() -> {
             clearFieldError(password);
@@ -128,28 +125,36 @@ public class SetupWizard extends JDialog {
         adminName.getDocument().addDocumentListener(onChange(() -> clearFieldError(adminName)));
         username.getDocument().addDocumentListener(onChange(() -> clearFieldError(username)));
 
-        JLabel error = new JLabel(" "); error.setForeground(RetailThemeManager.DANGER); error.setAlignmentX(Component.LEFT_ALIGNMENT);
-        content.add(error);
-
+        JLabel error = new JLabel(" "); error.setForeground(RetailThemeManager.DANGER);
         JProgressBar progress = new JProgressBar();
         progress.setIndeterminate(true);
         progress.setVisible(false);
-        progress.setAlignmentX(Component.LEFT_ALIGNMENT);
-        progress.setMaximumSize(new Dimension(Integer.MAX_VALUE, 6));
-        content.add(Box.createVerticalStrut(6)); content.add(progress); content.add(Box.createVerticalStrut(6));
-
-        JButton finish = RetailThemeManager.primaryButton("Complete setup"); finish.setAlignmentX(Component.LEFT_ALIGNMENT);
-        finish.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48)); content.add(finish);
+        JPanel footer = new JPanel(new BorderLayout(10, 0));
+        footer.setBackground(RetailThemeManager.SURFACE); footer.setBorder(new EmptyBorder(10, 28, 18, 28));
+        JPanel feedback = new JPanel(); feedback.setOpaque(false); feedback.setLayout(new BoxLayout(feedback, BoxLayout.Y_AXIS));
+        feedback.add(error); feedback.add(Box.createVerticalStrut(4)); feedback.add(progress);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0)); actions.setOpaque(false);
+        JButton back = RetailThemeManager.secondaryButton("Back");
+        JButton next = RetailThemeManager.primaryButton("Next");
+        JButton finish = RetailThemeManager.successButton("Complete setup", "check");
+        actions.add(back); actions.add(next); actions.add(finish); footer.add(feedback, BorderLayout.CENTER); footer.add(actions, BorderLayout.EAST);
+        root.add(footer, BorderLayout.SOUTH);
         formControls.add(shopName); formControls.add(address); formControls.add(phone); formControls.add(logoPath);
         formControls.add(adminName); formControls.add(username); formControls.add(password); formControls.add(confirmation);
         formControls.add(finish);
 
+        Runnable updateNavigation = () -> {
+            int index = steps.getSelectedIndex();
+            back.setEnabled(index > 0); next.setVisible(index < steps.getTabCount() - 1); finish.setVisible(index == steps.getTabCount() - 1);
+        };
+        back.addActionListener(e -> steps.setSelectedIndex(Math.max(0, steps.getSelectedIndex() - 1)));
+        next.addActionListener(e -> { if (steps.getSelectedIndex() == 0 && shopName.getText().trim().isEmpty()) { error.setText("Enter your shop name to continue."); markFieldError(shopName); return; } error.setText(" "); steps.setSelectedIndex(steps.getSelectedIndex() + 1); });
+        steps.addChangeListener(e -> updateNavigation.run()); updateNavigation.run();
+
         finish.addActionListener(e -> save(shopName, address, phone, logoPath, primaryColor, darkMode,
             adminName, username, password, confirmation, error, finish, progress));
 
-        JScrollPane scroll = new JScrollPane(content);
-        scroll.setBorder(null); scroll.getVerticalScrollBar().setUnitIncrement(18);
-        setContentPane(scroll);
+        setContentPane(root);
         getRootPane().setDefaultButton(finish);
     }
 

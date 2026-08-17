@@ -14,6 +14,7 @@ public class UserRepository {
         u.setUsername(r.getString("username"));
         u.setPasswordHash(r.getString("password_hash"));
         u.setRole(r.getString("role"));
+        u.setPermissions(r.getString("permissions"));
         u.setFullName(r.getString("full_name"));
         u.setActive(r.getInt("active") == 1);
         u.setFailedLoginAttempts(r.getInt("failed_login_attempts"));
@@ -26,25 +27,25 @@ public class UserRepository {
     }
 
     public void insert(User u) throws SQLException {
-        String sql = "INSERT INTO users(id,username,password_hash,role,full_name,active," +
-            "failed_login_attempts,sync_status,created_at,updated_at) VALUES(?,?,?,?,?,?,0,?,?,?)";
+        String sql = "INSERT INTO users(id,username,password_hash,role,permissions,full_name,active," +
+            "failed_login_attempts,sync_status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,0,?,?,?)";
         try (Connection c = DatabaseManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, u.getId()); ps.setString(2, u.getUsername());
-            ps.setString(3, u.getPasswordHash()); ps.setString(4, u.getRole());
-            ps.setString(5, u.getFullName()); ps.setInt(6, u.isActive() ? 1 : 0);
-            ps.setString(7, u.getSyncStatus() != null ? u.getSyncStatus() : "PENDING");
-            ps.setString(8, LocalDateTime.now().toString()); ps.setString(9, LocalDateTime.now().toString());
+            ps.setString(3, u.getPasswordHash()); ps.setString(4, u.getRole()); ps.setString(5, u.getPermissions());
+            ps.setString(6, u.getFullName()); ps.setInt(7, u.isActive() ? 1 : 0);
+            ps.setString(8, u.getSyncStatus() != null ? u.getSyncStatus() : "PENDING");
+            ps.setString(9, LocalDateTime.now().toString()); ps.setString(10, LocalDateTime.now().toString());
             ps.executeUpdate();
         }
     }
 
     public void update(User u) throws SQLException {
-        String sql = "UPDATE users SET username=?,role=?,full_name=?,active=?,sync_status=?,updated_at=? WHERE id=?";
+        String sql = "UPDATE users SET username=?,role=?,permissions=?,full_name=?,active=?,sync_status=?,updated_at=? WHERE id=?";
         try (Connection c = DatabaseManager.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, u.getUsername()); ps.setString(2, u.getRole());
-            ps.setString(3, u.getFullName()); ps.setInt(4, u.isActive() ? 1 : 0);
-            ps.setString(5, "MODIFIED"); ps.setString(6, LocalDateTime.now().toString());
-            ps.setString(7, u.getId());
+            ps.setString(1, u.getUsername()); ps.setString(2, u.getRole()); ps.setString(3, u.getPermissions());
+            ps.setString(4, u.getFullName()); ps.setInt(5, u.isActive() ? 1 : 0);
+            ps.setString(6, "MODIFIED"); ps.setString(7, LocalDateTime.now().toString());
+            ps.setString(8, u.getId());
             ps.executeUpdate();
         }
     }

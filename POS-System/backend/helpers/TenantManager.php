@@ -9,11 +9,13 @@ final class TenantManager
         'users', 'categories', 'suppliers', 'products', 'product_images',
         'customers', 'sales', 'sale_items', 'inventory_movements',
         'purchase_orders', 'purchase_order_items', 'mpesa_transactions',
+        'job_cards', 'job_card_service_items', 'quotations', 'quotation_items',
         'app_settings',
     ];
 
     public static function ensureSchema(PDO $db): void
     {
+        self::ensureServiceTables($db);
         $db->exec(
             'CREATE TABLE IF NOT EXISTS businesses (
                 id VARCHAR(36) NOT NULL PRIMARY KEY,
@@ -55,6 +57,7 @@ final class TenantManager
         }
 
         if (self::tableExists($db, 'users')) {
+            self::addColumn($db, 'users', 'permissions', 'TEXT NULL');
             self::replaceUniqueIndex($db, 'users', 'uq_users_username', ['business_id', 'username']);
         }
         if (self::tableExists($db, 'categories')) {
@@ -69,9 +72,66 @@ final class TenantManager
         if (self::tableExists($db, 'mpesa_transactions')) {
             self::replaceUniqueIndex($db, 'mpesa_transactions', 'uq_mpesa_code', ['business_id', 'code']);
         }
+        if (self::tableExists($db, 'job_cards')) {
+            self::replaceUniqueIndex($db, 'job_cards', 'uq_job_cards_number', ['business_id', 'job_number']);
+        }
+        if (self::tableExists($db, 'quotations')) {
+            self::replaceUniqueIndex($db, 'quotations', 'uq_quotations_number', ['business_id', 'quotation_number']);
+        }
         if (self::tableExists($db, 'app_settings')) {
             self::replacePrimaryKey($db, 'app_settings', ['business_id', 'key']);
         }
+    }
+
+    /** Creates the service-sync tables on existing backend installations. */
+    private static function ensureServiceTables(PDO $db): void
+    {
+        $db->exec('CREATE TABLE IF NOT EXISTS job_cards (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, business_id VARCHAR(36) NULL,
+            job_number VARCHAR(50) NOT NULL, customer_id VARCHAR(36) NULL,
+            customer_name VARCHAR(150) NOT NULL, customer_phone VARCHAR(30) NULL,
+            asset_description TEXT NOT NULL, asset_serial VARCHAR(100) NULL,
+            problem_description TEXT NOT NULL, diagnosis TEXT NULL, resolution TEXT NULL,
+            technician_id VARCHAR(36) NULL, technician_name VARCHAR(150) NULL,
+            labour_charge DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            status VARCHAR(30) NOT NULL DEFAULT "OPEN", active_quotation_id VARCHAR(36) NULL,
+            due_date DATETIME NULL, sync_status VARCHAR(20) NOT NULL DEFAULT "SYNCED",
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_job_cards_number (job_number),
+            INDEX idx_job_cards_business_updated (business_id, updated_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        $db->exec('CREATE TABLE IF NOT EXISTS job_card_service_items (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, business_id VARCHAR(36) NULL,
+            job_card_id VARCHAR(36) NOT NULL, description TEXT NOT NULL,
+            charge DECIMAL(12,2) NOT NULL DEFAULT 0.00, quantity INT NOT NULL DEFAULT 1,
+            INDEX idx_jcsi_business_job (business_id, job_card_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        $db->exec('CREATE TABLE IF NOT EXISTS quotations (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, business_id VARCHAR(36) NULL,
+            quotation_number VARCHAR(50) NOT NULL, job_card_id VARCHAR(36) NOT NULL,
+            job_card_number VARCHAR(50) NULL, invoice_sale_id VARCHAR(36) NULL,
+            customer_id VARCHAR(36) NULL, customer_name VARCHAR(150) NOT NULL, customer_phone VARCHAR(30) NULL,
+            subtotal DECIMAL(12,2) NOT NULL DEFAULT 0.00, discount_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00, labour_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            grand_total DECIMAL(12,2) NOT NULL DEFAULT 0.00, notes TEXT NULL,
+            status VARCHAR(30) NOT NULL DEFAULT "DRAFT", created_by_id VARCHAR(36) NULL,
+            created_by_name VARCHAR(150) NULL, valid_until DATETIME NULL,
+            sync_status VARCHAR(20) NOT NULL DEFAULT "SYNCED",
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_quotations_number (quotation_number),
+            INDEX idx_quotations_business_updated (business_id, updated_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+        $db->exec('CREATE TABLE IF NOT EXISTS quotation_items (
+            id VARCHAR(36) NOT NULL PRIMARY KEY, business_id VARCHAR(36) NULL,
+            quotation_id VARCHAR(36) NOT NULL, product_id VARCHAR(36) NULL,
+            product_name VARCHAR(255) NOT NULL, product_sku VARCHAR(50) NULL,
+            quantity INT NOT NULL DEFAULT 1, unit_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            buying_price DECIMAL(12,2) NOT NULL DEFAULT 0.00, discount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            tax_rate DECIMAL(6,2) NOT NULL DEFAULT 0.00, line_total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            INDEX idx_qi_business_quotation (business_id, quotation_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     }
 
     public static function ensureLicenseBusiness(PDO $db, array $license): string

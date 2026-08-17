@@ -194,7 +194,7 @@ public class SalesPanel extends JPanel {
 
         // Totals panel
         JPanel totalsPanel = new JPanel(new GridLayout(4, 2, 4, 2));
-        totalsPanel.setBackground(Color.WHITE);
+        totalsPanel.setBackground(RetailThemeManager.CARD_BG);
         totalsPanel.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(RetailThemeManager.BORDER),
             new EmptyBorder(10, 12, 10, 12)));
@@ -774,51 +774,149 @@ public class SalesPanel extends JPanel {
         }
     }
 
-    private JButton createProductCard(Product p) {
-        String catName = categoryNames.getOrDefault(p.getCategoryId(), "");
-        String stockText = p.getCurrentStock() + " " + p.getUnit();
-        boolean lowStock = p.isLowStock();
+    private JPanel createProductCard(Product p) {
+        String catName   = categoryNames.getOrDefault(p.getCategoryId(), "");
+        boolean lowStock  = p.isLowStock();
         boolean outOfStock = p.getCurrentStock() <= 0;
+        boolean dark = RetailThemeManager.getInstance().isDark();
 
-        // Card text
-        String html = "<html><div style='width:120px;text-align:center'>" +
-            "<b>" + escHtml(p.getName()) + "</b><br>" +
-            "<span style='color:#64748b;font-size:10px'>" + escHtml(catName) + "</span><br>" +
-            "<span style='color:#2563eb;font-size:13px'><b>KES " + String.format("%.0f", p.getSellingPrice()) + "</b></span><br>" +
-            "<span style='color:" + (outOfStock ? "#ef4444" : lowStock ? "#d97706" : "#16a34a") +
-                ";font-size:10px'>" + stockText + "</span>" +
-            "</div></html>";
+        // ── accent colours per stock state ────────────────────────────────────
+        Color accentColor = outOfStock ? RetailThemeManager.DANGER
+                          : lowStock   ? RetailThemeManager.WARNING
+                          :              RetailThemeManager.ACCENT;
+        Color cardBg  = outOfStock ? (dark ? new Color(60, 18, 18)  : new Color(255, 241, 241))
+                      : lowStock   ? (dark ? new Color(58, 40,  8)  : new Color(255, 252, 235))
+                      :               RetailThemeManager.CARD_BG;
+        Color borderC = outOfStock ? (dark ? new Color(160, 50, 50)  : new Color(252, 165, 165))
+                      : lowStock   ? (dark ? new Color(160, 110, 20) : new Color(253, 230, 138))
+                      :               RetailThemeManager.BORDER;
 
-        JButton card = new JButton(html);
-        ImageIcon productImage = productImage(p.getImagePath(), 48, 48);
-        if (productImage != null) {
-            card.setIcon(productImage);
-            card.setVerticalTextPosition(SwingConstants.BOTTOM);
-            card.setHorizontalTextPosition(SwingConstants.CENTER);
-        }
-        card.setPreferredSize(new Dimension(140, 110));
-        card.setBackground(outOfStock ? new Color(255, 240, 240)
-                          : lowStock  ? new Color(255, 251, 235)
-                          : Color.WHITE);
-        card.setFocusPainted(false);
-        card.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(
-                outOfStock ? new Color(252, 165, 165) :
-                lowStock   ? new Color(253, 230, 138) :
-                             RetailThemeManager.BORDER, 1, true),
-            new EmptyBorder(6, 6, 6, 6)));
+        // ── load thumbnail ────────────────────────────────────────────────────
+        ImageIcon thumb = productImage(p.getImagePath(), 44, 44);
+
+        // ── card panel ────────────────────────────────────────────────────────
+        JPanel card = new JPanel(new BorderLayout(0, 0)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(cardBg);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.setColor(borderC);
+                g2.setStroke(new BasicStroke(1.2f));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+                g2.dispose();
+            }
+        };
+        card.setOpaque(false);
+        card.setPreferredSize(new Dimension(148, 152));
+        card.setBorder(new EmptyBorder(8, 8, 8, 8));
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        card.setHorizontalAlignment(SwingConstants.CENTER);
-        card.setVerticalAlignment(SwingConstants.CENTER);
 
-        card.addActionListener(e -> {
-            if (outOfStock) {
-                stockWarningLabel.setForeground(RetailThemeManager.DANGER);
-                stockWarningLabel.setText("Out of stock: " + p.getName());
-            } else {
-                addToCart(p);
-                stockWarningLabel.setForeground(RetailThemeManager.ACCENT);
-                stockWarningLabel.setText("Added: " + p.getName());
+        // ── image or icon placeholder ─────────────────────────────────────────
+        JPanel imageArea = new JPanel(new GridBagLayout());
+        imageArea.setOpaque(false);
+        imageArea.setPreferredSize(new Dimension(60, 56));
+        if (thumb != null) {
+            JLabel imgLbl = new JLabel(thumb);
+            imgLbl.setOpaque(false);
+            imageArea.add(imgLbl);
+        } else {
+            // coloured circle with first letter
+            JPanel circle = new JPanel(new GridBagLayout()) {
+                @Override protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(new Color(accentColor.getRed(), accentColor.getGreen(),
+                                         accentColor.getBlue(), dark ? 60 : 30));
+                    g2.fillOval(0, 0, getWidth(), getHeight());
+                    g2.dispose();
+                }
+            };
+            circle.setOpaque(false);
+            circle.setPreferredSize(new Dimension(44, 44));
+            String initial = p.getName() != null && !p.getName().isEmpty()
+                ? String.valueOf(p.getName().charAt(0)).toUpperCase() : "?";
+            JLabel initLbl = new JLabel(initial);
+            initLbl.setFont(new Font("Segoe UI", Font.BOLD, 18));
+            initLbl.setForeground(accentColor);
+            circle.add(initLbl);
+            imageArea.add(circle);
+        }
+
+        // ── text block ────────────────────────────────────────────────────────
+        JPanel textBlock = new JPanel();
+        textBlock.setLayout(new BoxLayout(textBlock, BoxLayout.Y_AXIS));
+        textBlock.setOpaque(false);
+
+        JLabel nameLabel = new JLabel("<html><b>" + escHtml(p.getName()) + "</b></html>");
+        nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        nameLabel.setForeground(RetailThemeManager.TEXT);
+        nameLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel catLabel = new JLabel(catName.isEmpty() ? " " : catName);
+        catLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        catLabel.setForeground(RetailThemeManager.TEXT_MUTED);
+        catLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel priceLabel = new JLabel("KES " + String.format("%.0f", p.getSellingPrice()));
+        priceLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        priceLabel.setForeground(RetailThemeManager.PRIMARY);
+        priceLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // stock pill
+        String stockTxt = outOfStock ? "Out of stock"
+                        : lowStock   ? p.getCurrentStock() + " " + p.getUnit() + " (low)"
+                        :              p.getCurrentStock() + " " + p.getUnit();
+        JLabel stockLabel = new JLabel(stockTxt) {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(accentColor.getRed(), accentColor.getGreen(),
+                                     accentColor.getBlue(), dark ? 55 : 30));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        stockLabel.setFont(new Font("Segoe UI", Font.PLAIN, 9));
+        stockLabel.setForeground(accentColor);
+        stockLabel.setOpaque(false);
+        stockLabel.setBorder(new EmptyBorder(1, 5, 1, 5));
+        stockLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        textBlock.add(nameLabel);
+        textBlock.add(Box.createVerticalStrut(2));
+        textBlock.add(catLabel);
+        textBlock.add(Box.createVerticalStrut(4));
+        textBlock.add(priceLabel);
+        textBlock.add(Box.createVerticalStrut(4));
+        textBlock.add(stockLabel);
+
+        card.add(imageArea,  BorderLayout.WEST);
+        card.add(textBlock,  BorderLayout.CENTER);
+
+        // ── hover effect ──────────────────────────────────────────────────────
+        card.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseEntered(java.awt.event.MouseEvent e) {
+                card.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(RetailThemeManager.PRIMARY, 2, true),
+                    new EmptyBorder(7, 7, 7, 7)));
+                card.repaint();
+            }
+            @Override public void mouseExited(java.awt.event.MouseEvent e) {
+                card.setBorder(new EmptyBorder(8, 8, 8, 8));
+                card.repaint();
+            }
+            @Override public void mousePressed(java.awt.event.MouseEvent e) {
+                if (outOfStock) {
+                    stockWarningLabel.setForeground(RetailThemeManager.DANGER);
+                    stockWarningLabel.setText("Out of stock: " + p.getName());
+                } else {
+                    addToCart(p);
+                    stockWarningLabel.setForeground(RetailThemeManager.ACCENT);
+                    stockWarningLabel.setText("Added: " + p.getName());
+                }
             }
         });
         return card;

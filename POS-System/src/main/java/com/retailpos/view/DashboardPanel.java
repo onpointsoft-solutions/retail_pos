@@ -14,10 +14,11 @@ import java.util.Map;
 
 public class DashboardPanel extends JPanel implements SaleService.SaleListener {
     private JLabel salesCountLabel, revenueLabel, profitLabel, stockValueLabel;
-    private JLabel pendingSyncLabel, lowStockLabel;
+    private JLabel pendingSyncLabel, lowStockLabel, forecastLabel;
     private DefaultTableModel recentSalesModel;
     private DefaultTableModel topProductsModel;
     private TrendChart trendChart;
+    private PieChart pieChart;
     private Timer refreshTimer;
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("HH:mm dd/MM");
 
@@ -33,7 +34,7 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
 
     private void build() {
         // Top metric cards
-        JPanel metrics = new JPanel(new GridLayout(1, 6, 10, 0));
+        JPanel metrics = new JPanel(new GridLayout(1, 7, 10, 0));
         metrics.setOpaque(false);
         salesCountLabel  = buildMetricCard(metrics, "Today's Sales", "0", RetailThemeManager.PRIMARY);
         revenueLabel     = buildMetricCard(metrics, "Revenue", "KES 0.00", RetailThemeManager.ACCENT);
@@ -41,6 +42,7 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
         stockValueLabel  = buildMetricCard(metrics, "Stock Value", "KES 0.00", RetailThemeManager.WARNING);
         pendingSyncLabel = buildMetricCard(metrics, "Pending Sync", "0", RetailThemeManager.DANGER);
         lowStockLabel    = buildMetricCard(metrics, "Low Stock", "0", RetailThemeManager.DANGER);
+        forecastLabel    = buildMetricCard(metrics, "Tomorrow Forecast", "KES 0.00", new Color(8, 145, 178));
         add(metrics, BorderLayout.NORTH);
 
         // Middle: recent sales + top products
@@ -68,16 +70,19 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
         middle.setRightComponent(topPanel);
         add(middle, BorderLayout.CENTER);
 
-        // Bottom: trend chart
+        // Bottom: visual analytics
         trendChart = new TrendChart();
-        JPanel chartPanel = createSection("Sales Trend (Last 7 Days)", trendChart);
-        chartPanel.setPreferredSize(new Dimension(0, 180));
-        add(chartPanel, BorderLayout.SOUTH);
+        pieChart = new PieChart();
+        JSplitPane analytics = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+            createSection("Revenue Trend (Last 7 Days)", trendChart),
+            createSection("Top Product Revenue Mix", pieChart));
+        analytics.setResizeWeight(.58); analytics.setDividerSize(8); analytics.setPreferredSize(new Dimension(0, 200));
+        add(analytics, BorderLayout.SOUTH);
     }
 
     private JLabel buildMetricCard(JPanel parent, String title, String defaultVal, Color color) {
         JPanel card = new JPanel(new BorderLayout(0, 6));
-        card.setBackground(Color.WHITE);
+        card.setBackground(RetailThemeManager.CARD_BG);
         card.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(RetailThemeManager.BORDER, 1, true),
             new EmptyBorder(14, 14, 14, 14)));
@@ -95,7 +100,7 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
 
     private JPanel createSection(String title, JComponent content) {
         JPanel p = new JPanel(new BorderLayout(0, 8));
-        p.setBackground(Color.WHITE);
+        p.setBackground(RetailThemeManager.CARD_BG);
         p.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(RetailThemeManager.BORDER, 1, true),
             new EmptyBorder(12, 12, 12, 12)));
@@ -165,6 +170,7 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
                     });
                 }
             }
+            pieChart.setData((List<Map<String, Object>>) top);
         }
 
         // Trend chart
@@ -172,6 +178,8 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
         if (trend instanceof List) {
             List<Map<String,Object>> trendData = (List<Map<String,Object>>) trend;
             trendChart.setData(trendData);
+            double average = trendData.stream().mapToDouble(d -> ((Number) d.getOrDefault("revenue", 0.0)).doubleValue()).average().orElse(0);
+            forecastLabel.setText(String.format("KES %.2f", average));
         }
     }
 
@@ -182,17 +190,18 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
         t.setRepeats(false); t.start();
     }
 
-    // Simple bar chart for 7-day trend
+    // Seven-day line chart
     static class TrendChart extends JPanel {
         private java.util.List<Map<String, Object>> data;
 
         TrendChart() {
-            setBackground(Color.WHITE);
+            setOpaque(true);
             setPreferredSize(new Dimension(0, 120));
         }
 
         void setData(java.util.List<Map<String, Object>> data) {
             this.data = data;
+            setBackground(RetailThemeManager.CARD_BG);
             repaint();
         }
 
@@ -203,25 +212,42 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
             Graphics2D g = (Graphics2D) g2d.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int w = getWidth(), h = getHeight();
-            int pad = 30, barW = (w - 2 * pad) / data.size();
+            int pad = 30, step = data.size() > 1 ? (w - 2 * pad) / (data.size() - 1) : 1;
             double maxVal = data.stream().mapToDouble(d -> ((Number) d.getOrDefault("revenue", 0.0)).doubleValue()).max().orElse(1.0);
             if (maxVal == 0) maxVal = 1;
             int maxBarH = h - pad - 20;
+            int previousX = -1, previousY = -1;
             for (int i = 0; i < data.size(); i++) {
                 Map<String, Object> d = data.get(i);
                 double rev = ((Number) d.getOrDefault("revenue", 0.0)).doubleValue();
-                int barH = (int) (rev / maxVal * maxBarH);
-                int x = pad + i * barW + barW / 4;
-                int bw = barW / 2;
-                int y = h - pad - barH;
-                g.setColor(RetailThemeManager.PRIMARY);
-                g.fillRoundRect(x, y, bw, barH, 4, 4);
+                int x = pad + i * step;
+                int y = h - pad - (int) (rev / maxVal * maxBarH);
+                if (previousX >= 0) { g.setColor(RetailThemeManager.PRIMARY); g.setStroke(new BasicStroke(3f)); g.drawLine(previousX, previousY, x, y); }
+                g.setColor(RetailThemeManager.ACCENT); g.fillOval(x - 4, y - 4, 8, 8);
+                previousX = x; previousY = y;
                 // Date label
                 String date = (String) d.getOrDefault("date", "");
                 g.setColor(RetailThemeManager.TEXT_MUTED);
                 g.setFont(new Font("Segoe UI", Font.PLAIN, 9));
-                g.drawString(date.length() >= 10 ? date.substring(5) : date, x - 2, h - 8);
+                g.drawString(date.length() >= 10 ? date.substring(5) : date, x - 12, h - 8);
             }
+            g.dispose();
+        }
+    }
+
+    static class PieChart extends JPanel {
+        private List<Map<String, Object>> data;
+        PieChart() { setOpaque(true); }
+        void setData(List<Map<String, Object>> value) { data = value; setBackground(RetailThemeManager.CARD_BG); repaint(); }
+        @Override protected void paintComponent(Graphics raw) {
+            super.paintComponent(raw); if (data == null || data.isEmpty()) return;
+            Graphics2D g = (Graphics2D) raw.create(); g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            double total = data.stream().mapToDouble(d -> ((Number)d.getOrDefault("total_rev", 0)).doubleValue()).sum(); if (total <= 0) { g.dispose(); return; }
+            Color[] colors = {RetailThemeManager.PRIMARY, RetailThemeManager.ACCENT, RetailThemeManager.WARNING, new Color(124,58,237), RetailThemeManager.DANGER};
+            int size = Math.min(getHeight() - 20, 150), x = 12, y = (getHeight() - size) / 2, start = 0;
+            for (int i = 0; i < Math.min(data.size(), 5); i++) { int arc = (int)Math.round(((Number)data.get(i).getOrDefault("total_rev", 0)).doubleValue() * 360 / total); g.setColor(colors[i]); g.fillArc(x, y, size, size, start, arc); start += arc; }
+            g.setFont(new Font("Segoe UI", Font.PLAIN, 10)); int ly = 25;
+            for (int i = 0; i < Math.min(data.size(), 5); i++) { g.setColor(colors[i]); g.fillRect(size + 30, ly - 8, 9, 9); g.setColor(RetailThemeManager.TEXT_MUTED); String name = String.valueOf(data.get(i).get("product_name")); g.drawString(name.length() > 18 ? name.substring(0, 18) + "…" : name, size + 45, ly); ly += 22; }
             g.dispose();
         }
     }

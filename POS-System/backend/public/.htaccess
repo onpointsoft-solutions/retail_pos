@@ -1,2 +1,14 @@
 Options -Indexes
 DirectoryIndex index.php licensing.php
+
+# Block direct directory listing of downloads folder
+<IfModule mod_autoindex.c>
+    IndexIgnore *
+</IfModule>
+
+# Prevent PHP execution inside downloads/
+<IfModule mod_php.c>
+    <FilesMatch "^downloads/">
+        php_flag engine off
+    </FilesMatch>
+</IfModule>

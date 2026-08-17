@@ -2,6 +2,8 @@ package com.retailpos.view;
 
 import com.retailpos.service.LicenseService;
 import com.retailpos.service.LicenseService.LicenseSnapshot;
+import com.retailpos.model.AppSettings;
+import com.retailpos.repository.SettingsRepository;
 import com.retailpos.ui.RetailThemeManager;
 import java.awt.*;
 import java.net.URI;
@@ -15,6 +17,8 @@ public class LicenseActivationDialog extends JDialog {
     private final LicenseService licenseService = LicenseService.getInstance();
     private final JTextField backendUrlField = RetailThemeManager.styledField();
     private final JTextField licenseKeyField = RetailThemeManager.styledField();
+    private final JTextField syncUsernameField = RetailThemeManager.styledField();
+    private final JPasswordField syncPasswordField = RetailThemeManager.styledPasswordField();
     private final JLabel statusLabel = new JLabel(" ");
     private boolean activated;
 
@@ -192,10 +196,22 @@ public class LicenseActivationDialog extends JDialog {
         machine.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         machine.setForeground(RetailThemeManager.TEXT_MUTED);
         constraints.gridy = 5;
+        form.add(label("Sync username (shared business account)"), constraints);
+        AppSettings savedSettings;
+        try { savedSettings = new SettingsRepository().load(); } catch (Exception ignored) { savedSettings = new AppSettings(); }
+        syncUsernameField.setText(savedSettings.getSyncApiUsername());
+        constraints.gridy = 6;
+        form.add(syncUsernameField, constraints);
+        constraints.gridy = 7;
+        form.add(label("Sync password"), constraints);
+        constraints.gridy = 8;
+        form.add(syncPasswordField, constraints);
+
+        constraints.gridy = 9;
         form.add(machine, constraints);
 
         statusLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        constraints.gridy = 6;
+        constraints.gridy = 10;
         form.add(statusLabel, constraints);
         return form;
     }
@@ -210,6 +226,8 @@ public class LicenseActivationDialog extends JDialog {
     private void activate(JButton button) {
         String key = licenseKeyField.getText().trim();
         String apiUrl = backendUrlField.getText().trim();
+        String syncUsername = syncUsernameField.getText().trim();
+        String syncPassword = new String(syncPasswordField.getPassword());
         button.setEnabled(false);
         statusLabel.setText("Contacting licensing server…");
         statusLabel.setForeground(RetailThemeManager.PRIMARY);
@@ -225,6 +243,15 @@ public class LicenseActivationDialog extends JDialog {
                 try {
                     LicenseSnapshot result = get();
                     activated = result.isAllowed();
+                    // Store the business sync account with this licensed workstation.
+                    if (!syncUsername.isBlank() || !syncPassword.isBlank()) {
+                        AppSettings appSettings = new SettingsRepository().load();
+                        appSettings.setSyncApiUrl(apiUrl);
+                        appSettings.setSyncApiUsername(syncUsername);
+                        appSettings.setSyncApiPassword(syncPassword);
+                        appSettings.setSyncApiToken("");
+                        new SettingsRepository().save(appSettings);
+                    }
                     statusLabel.setText("Activated: " + result.getPlanName());
                     statusLabel.setForeground(RetailThemeManager.ACCENT);
                     JOptionPane.showMessageDialog(

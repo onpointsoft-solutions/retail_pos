@@ -1,0 +1,49 @@
+#!/usr/bin/make -f
+# Debian rules file for bizflow-pos
+# Uses debhelper 13 (dh) with the Maven-produced fat JAR.
+# The JAR is pre-built by build.sh; debhelper only stages and packages it.
+
+%:
+	dh $@
+
+# Skip the normal build step — Maven is run by build.sh before invoking dpkg-buildpackage.
+override_dh_auto_build:
+	@echo "Skipping dh_auto_build: fat JAR already built by Maven (build.sh)."
+
+# Nothing to test at package-build time.
+override_dh_auto_test:
+	@echo "Skipping dh_auto_test."
+
+# Install files into the staging tree (debian/bizflow-pos/).
+override_dh_auto_install:
+	# Application JAR → /usr/share/bizflow-pos/
+	install -d debian/bizflow-pos/usr/share/bizflow-pos
+	install -m 644 target/BizFlowPOS.jar \
+	              debian/bizflow-pos/usr/share/bizflow-pos/BizFlowPOS.jar
+
+	# Application icon → /usr/share/pixmaps/
+	install -d debian/bizflow-pos/usr/share/pixmaps
+	install -m 644 src/main/resources/logo.png \
+	              debian/bizflow-pos/usr/share/pixmaps/bizflow-pos.png
+
+	# Launcher script → /usr/bin/
+	install -d debian/bizflow-pos/usr/bin
+	install -m 755 packaging/bizflow-pos \
+	              debian/bizflow-pos/usr/bin/bizflow-pos
+
+	# Desktop entry → /usr/share/applications/
+	install -d debian/bizflow-pos/usr/share/applications
+	install -m 644 packaging/bizflow-pos.desktop \
+	              debian/bizflow-pos/usr/share/applications/bizflow-pos.desktop
+
+	# Default application.properties → /etc/bizflow-pos/
+	install -d debian/bizflow-pos/etc/bizflow-pos
+	install -m 644 src/main/resources/application.properties \
+	              debian/bizflow-pos/etc/bizflow-pos/application.properties
+
+# Prevent stripping of the JAR (it contains no native binaries to strip).
+override_dh_strip:
+	@echo "Skipping dh_strip for pure-Java package."
+
+override_dh_shlibdeps:
+	@echo "Skipping dh_shlibdeps for pure-Java package."

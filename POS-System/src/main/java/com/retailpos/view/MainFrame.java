@@ -9,6 +9,7 @@ import com.retailpos.ui.Icons;
 import com.retailpos.ui.RetailThemeManager;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import java.io.File;
 import java.awt.*;
 import java.awt.event.*;
 import java.time.LocalDateTime;
@@ -87,6 +88,7 @@ public class MainFrame extends JFrame {
             tabs.addTab("Customers",  Icons.get("customers",  18), new CustomersPanel());
             tabs.addTab("Inventory",  Icons.get("inventory",  18), new InventoryPanel());
             tabs.addTab("Purchases",  Icons.get("purchases",  18), new PurchasesPanel());
+            tabs.addTab("Services",   Icons.get("services",   18), new ServicesPanel());
             tabs.addTab("Reports",    Icons.get("reports",    18), new ReportsPanel());
             tabs.addTab("Settings",   Icons.get("settings",   18), new SettingsPanel());
         } else {
@@ -105,50 +107,66 @@ public class MainFrame extends JFrame {
     }
 
     private JComponent buildHeader() {
-        JPanel header = new JPanel(new BorderLayout(0, 0));
+        JPanel header = new JPanel(new BorderLayout(18, 0));
         header.setBackground(RetailThemeManager.NAVY);
-        header.setBorder(new EmptyBorder(12, 20, 12, 20));
+        header.setBorder(new EmptyBorder(12, 22, 12, 22));
+        header.setPreferredSize(new Dimension(0, 78));
 
         // Logo + title
-        JPanel brand = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel brand = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         brand.setOpaque(false);
-        // Header icon — drawn, not emoji
-        JLabel icon = new JLabel(Icons.get("cart", 28));
-        JLabel title = new JLabel("  " + settings.getStoreName() + "  |  Point of Sale");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        JLabel icon = new JLabel(Icons.get("cart", 26), SwingConstants.CENTER);
+        icon.setPreferredSize(new Dimension(48, 48)); icon.setOpaque(true); icon.setBackground(new Color(30, 64, 175));
+        icon.setBorder(BorderFactory.createLineBorder(new Color(147, 197, 253), 1, true));
+        String logoPath = settings.getLogoPath();
+        if (logoPath != null && !logoPath.isBlank() && new File(logoPath).isFile())
+            icon.setIcon(new ImageIcon(new ImageIcon(logoPath).getImage().getScaledInstance(40, 40, Image.SCALE_SMOOTH)));
+        JPanel titleBlock = new JPanel(); titleBlock.setLayout(new BoxLayout(titleBlock, BoxLayout.Y_AXIS)); titleBlock.setOpaque(false);
+        JLabel title = new JLabel(settings.getStoreName());
+        title.setFont(new Font("Segoe UI", Font.BOLD, 21));
         title.setForeground(Color.WHITE);
-        brand.add(icon); brand.add(title);
+        JLabel subtitle = new JLabel("POINT OF SALE  •  BUSINESS CONTROL CENTRE");
+        subtitle.setFont(new Font("Segoe UI", Font.BOLD, 10)); subtitle.setForeground(new Color(148, 163, 184));
+        titleBlock.add(title); titleBlock.add(Box.createVerticalStrut(3)); titleBlock.add(subtitle);
+        brand.add(icon); brand.add(titleBlock);
         header.add(brand, BorderLayout.WEST);
 
         // Right controls
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
         right.setOpaque(false);
 
-        statusSyncLabel = new JLabel("Sync: Ready");
+        statusSyncLabel = headerBadge("Sync ready", Icons.get("sync", 14));
         statusSyncLabel.setIcon(Icons.get("sync", 14));
         statusSyncLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         statusSyncLabel.setForeground(new Color(148, 163, 184));
 
-        statusOnlineLabel = new JLabel("Offline");
+        statusOnlineLabel = headerBadge("Offline", Icons.get("offline", 12));
         statusOnlineLabel.setIcon(Icons.get("offline", 12));
         statusOnlineLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
         statusOnlineLabel.setForeground(new Color(248, 113, 113));
 
-        JLabel bridgeAddress = new JLabel("Phone UDP: " + localIpv4Address() + ":45876");
-        bridgeAddress.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        bridgeAddress.setForeground(new Color(148, 163, 184));
+        JLabel bridgeAddress = headerBadge("Bridge  " + localIpv4Address() + ":45876", Icons.get("sync", 12));
 
         JButton logoutBtn = new JButton("Logout");
         logoutBtn.setIcon(Icons.get("logout", 16));
-        logoutBtn.setForeground(Color.WHITE); logoutBtn.setOpaque(false);
-        logoutBtn.setContentAreaFilled(false); logoutBtn.setBorderPainted(false);
-        logoutBtn.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        logoutBtn.setForeground(Color.WHITE); logoutBtn.setBackground(new Color(51, 65, 85)); logoutBtn.setOpaque(true);
+        logoutBtn.setContentAreaFilled(true); logoutBtn.setBorderPainted(false);
+        logoutBtn.setBorder(new EmptyBorder(9, 12, 9, 12)); logoutBtn.setFont(new Font("Segoe UI", Font.BOLD, 12));
         logoutBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         logoutBtn.addActionListener(e -> doLogout());
 
         right.add(statusSyncLabel); right.add(statusOnlineLabel); right.add(bridgeAddress); right.add(logoutBtn);
         header.add(right, BorderLayout.EAST);
         return header;
+    }
+
+    private JLabel headerBadge(String text, Icon icon) {
+        JLabel badge = new JLabel(text, icon, SwingConstants.CENTER);
+        badge.setOpaque(true); badge.setBackground(new Color(30, 41, 59));
+        badge.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(71, 85, 105), 1, true), new EmptyBorder(7, 10, 7, 10)));
+        badge.setIconTextGap(6); badge.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+        badge.setForeground(new Color(203, 213, 225));
+        return badge;
     }
 
     private JComponent buildStatusBar() {

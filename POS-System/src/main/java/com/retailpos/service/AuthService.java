@@ -73,6 +73,15 @@ public class AuthService {
     public boolean hasPermission(String permission) {
         if (currentUser == null) return false;
         if (currentUser.isAdmin()) return true;
+        if (currentUser.hasExplicitPermission(permission)) return true;
+        if ("MANAGER".equals(currentUser.getRole())) {
+            return switch (permission) {
+                case "SELL", "SEARCH_PRODUCTS", "PRINT_RECEIPT", "SUSPEND_SALE", "RESUME_SALE",
+                     "VIEW_OWN_SALES", "ATTACH_CUSTOMER", "MANAGE_PRODUCTS", "MANAGE_CUSTOMERS",
+                     "MANAGE_INVENTORY", "MANAGE_PURCHASES", "MANAGE_SERVICES", "VIEW_REPORTS" -> true;
+                default -> false;
+            };
+        }
         if (currentUser.isCashier()) {
             return switch (permission) {
                 case "SELL", "SEARCH_PRODUCTS", "PRINT_RECEIPT",

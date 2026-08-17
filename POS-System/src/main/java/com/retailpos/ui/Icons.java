@@ -68,6 +68,8 @@ public final class Icons {
             case "online"   -> drawDot(g, s, new Color(34, 197, 94));
             case "offline"  -> drawDot(g, s, new Color(239, 68, 68));
             case "syncing"  -> drawRefresh(g, s, p, w, lw);
+            case "services" -> drawServices(g, s, p, w, lw);
+            case "jobcard"  -> drawServices(g, s, p, w, lw);
             default         -> drawBox(g, s, p, w, lw);
         }
     }
@@ -296,6 +298,32 @@ public final class Icons {
         g.setStroke(new BasicStroke(lw * 1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(new Line2D.Float(p + w * 0.12f, p + w * 0.52f, p + w * 0.42f, p + w * 0.78f));
         g.draw(new Line2D.Float(p + w * 0.42f, p + w * 0.78f, p + w * 0.88f, p + w * 0.22f));
+    }
+
+    private static void drawServices(Graphics2D g, int s, float p, float w, float lw) {
+        // Wrench + clipboard composite icon
+        g.setColor(ink(220));
+        // Clipboard body
+        float cbx = p + w * 0.38f, cby = p + w * 0.18f, cbw = w * 0.55f, cbh = w * 0.72f;
+        g.draw(new RoundRectangle2D.Float(cbx, cby, cbw, cbh, lw, lw));
+        // Clipboard top clip
+        float clx = cbx + cbw * 0.25f, cly = cby - lw * 1.5f, clw = cbw * 0.5f, clh = lw * 3f;
+        g.fill(new RoundRectangle2D.Float(clx, cly, clw, clh, lw * 0.5f, lw * 0.5f));
+        // Lines on clipboard
+        float lx1 = cbx + cbw * 0.15f, lx2 = cbx + cbw * 0.85f;
+        float ly1 = cby + cbh * 0.30f, ly2 = cby + cbh * 0.52f, ly3 = cby + cbh * 0.72f;
+        g.setStroke(new BasicStroke(lw * 0.9f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(new Line2D.Float(lx1, ly1, lx2, ly1));
+        g.draw(new Line2D.Float(lx1, ly2, lx2, ly2));
+        g.draw(new Line2D.Float(lx1, ly3, lx1 + (lx2 - lx1) * 0.55f, ly3));
+        // Wrench (bottom-left, small)
+        g.setColor(RetailThemeManager.PRIMARY);
+        g.setStroke(new BasicStroke(lw * 1.3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        float wx = p + w * 0.05f, wy = p + w * 0.55f, wr2 = w * 0.14f;
+        // Wrench handle
+        g.draw(new Line2D.Float(wx + wr2, wy + wr2, wx + wr2 * 2.8f, wy + wr2 * 2.8f));
+        // Wrench head circle
+        g.draw(new Ellipse2D.Float(wx, wy - wr2 * 0.5f, wr2 * 2, wr2 * 2));
     }
 
     private static void drawWarning(Graphics2D g, int s, float p, float w, float lw) {

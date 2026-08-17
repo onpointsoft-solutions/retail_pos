@@ -1,0 +1,8 @@
+bizflow-pos (1.0.0-1) stable; urgency=medium
+
+  * Initial Debian package release.
+  * Java 21 Swing desktop POS application.
+  * SQLite local database; optional cloud sync.
+  * Barcode scanning, PDF/Excel reports, role-based logins.
+
+ -- Onpointsoft Solutions <mobilemealscenter@gmail.com>  Mon, 03 Aug 2026 08:00:00 +0300

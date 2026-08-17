@@ -183,7 +183,7 @@ public class MobileMealsPOS extends JFrame {
     }
     
     private JButton createNavButton(String title, String icon, String tooltip, Color color) {
-        JButton button = new JButton(icon + " " " + title);
+        JButton button = new JButton(icon + " " + title);
         button.setToolTipText(tooltip);
         button.setBackground(color);
         button.setForeground(Color.WHITE);

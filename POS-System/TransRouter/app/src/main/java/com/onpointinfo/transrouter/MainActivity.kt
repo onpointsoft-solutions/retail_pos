@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity() {
 
         val grantSmsButton = findViewById<Button>(R.id.grantSmsButton)
         val setDefaultSmsButton = findViewById<Button>(R.id.setDefaultSmsButton)
+        val openAccessibilityButton = findViewById<Button>(R.id.openAccessibilityButton)
         val savePosButton = findViewById<Button>(R.id.savePosButton)
 
         posHostField.setText(getSharedPreferences("transrouter", MODE_PRIVATE).getString("pos_host", ""))
@@ -73,6 +74,11 @@ class MainActivity : AppCompatActivity() {
             val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
             intent.putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
             startActivity(intent)
+        }
+
+        openAccessibilityButton.setOnClickListener {
+            // Android deliberately requires an informed, user-operated choice.
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
 
         savePosButton.setOnClickListener {

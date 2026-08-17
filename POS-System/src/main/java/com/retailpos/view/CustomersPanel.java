@@ -115,7 +115,7 @@ public class CustomersPanel extends JPanel {
             isNew ? "Add Customer" : "Edit Customer", true);
         d.setSize(440, 340); d.setLocationRelativeTo(this);
         JPanel form = new JPanel(new GridBagLayout());
-        form.setBackground(Color.WHITE);
+        form.setBackground(RetailThemeManager.CARD_BG);
         form.setBorder(new EmptyBorder(20, 24, 20, 24));
         GridBagConstraints g = new GridBagConstraints();
         g.fill = GridBagConstraints.HORIZONTAL; g.weightx = 1; g.insets = new Insets(4, 0, 4, 0);

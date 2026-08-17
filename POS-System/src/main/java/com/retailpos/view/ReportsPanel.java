@@ -37,7 +37,6 @@ public class ReportsPanel extends JPanel {
         // Toolbar
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
         toolbar.setOpaque(false);
-        toolbar.setBackground(Color.WHITE);
         toolbar.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(RetailThemeManager.BORDER, 1),
             new EmptyBorder(8, 12, 8, 12)));

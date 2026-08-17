@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BizFlow POS
+GenericName=Point of Sale
+Comment=Desktop Point of Sale system for Retail and Supermarket
+Exec=bizflow-pos
+Icon=bizflow-pos
+Terminal=false
+Categories=Office;Finance;Java;
+Keywords=pos;retail;sales;inventory;receipt;barcode;
+StartupNotify=true
+StartupWMClass=BizFlow POS

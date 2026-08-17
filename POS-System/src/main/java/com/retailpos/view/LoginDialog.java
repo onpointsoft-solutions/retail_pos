@@ -17,7 +17,7 @@ public class LoginDialog extends JDialog {
 
     public LoginDialog(Frame parent) {
         super(parent, "BizFlow POS — Sign In", true);
-        setSize(900, 560);
+        setSize(860, 540);
         setLocationRelativeTo(parent);
         setResizable(false);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
@@ -26,13 +26,13 @@ public class LoginDialog extends JDialog {
 
     private void buildUI() {
         JPanel root = new JPanel(new BorderLayout());
-        root.setBackground(Color.WHITE);
+        root.setBackground(RetailThemeManager.SURFACE);
 
         // Left branding panel
         JPanel brand = new JPanel(new GridBagLayout());
         brand.setBackground(RetailThemeManager.NAVY);
-        brand.setPreferredSize(new Dimension(320, 0));
-        brand.setBorder(new EmptyBorder(60, 40, 60, 40));
+        brand.setPreferredSize(new Dimension(300, 0));
+        brand.setBorder(new EmptyBorder(52, 36, 52, 36));
         GridBagConstraints bc = new GridBagConstraints();
         bc.gridx = 0; bc.anchor = GridBagConstraints.NORTHWEST; bc.insets = new Insets(0, 0, 10, 0);
 
@@ -52,8 +52,8 @@ public class LoginDialog extends JDialog {
         brand.add(sub, bc);
 
         bc.gridy = 3; bc.insets = new Insets(0, 0, 6, 0);
-        String[] features = {"[v]  Works without internet", "[v]  Auto-sync when online",
-                             "[v]  Barcode & QR scanning",  "[v]  Multi-user roles"};
+        String[] features = {"✓  Works without internet", "✓  Auto-sync when online",
+                             "✓  Barcode & QR scanning",  "✓  Secure team access"};
         for (String f : features) {
             JLabel fl = new JLabel(f);
             fl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
@@ -63,8 +63,8 @@ public class LoginDialog extends JDialog {
 
         // Right form panel
         JPanel form = new JPanel(new GridBagLayout());
-        form.setBackground(Color.WHITE);
-        form.setBorder(new EmptyBorder(70, 60, 60, 60));
+        form.setBackground(RetailThemeManager.CARD_BG);
+        form.setBorder(new EmptyBorder(58, 56, 48, 56));
         GridBagConstraints g = new GridBagConstraints();
         g.gridx = 0; g.fill = GridBagConstraints.HORIZONTAL; g.weightx = 1;
 
@@ -93,8 +93,14 @@ public class LoginDialog extends JDialog {
 
         g.gridy = 5; g.insets = new Insets(0, 0, 8, 0);
         passwordField = RetailThemeManager.styledPasswordField();
-        passwordField.setPreferredSize(new Dimension(300, 44));
-        form.add(passwordField, g);
+        passwordField.setPreferredSize(new Dimension(250, 44));
+        JToggleButton reveal = new JToggleButton("Show");
+        reveal.setFocusable(false); reveal.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        char hiddenChar = passwordField.getEchoChar();
+        reveal.addActionListener(e -> { passwordField.setEchoChar(reveal.isSelected() ? (char) 0 : hiddenChar); reveal.setText(reveal.isSelected() ? "Hide" : "Show"); });
+        JPanel passwordRow = new JPanel(new BorderLayout(8, 0)); passwordRow.setOpaque(false);
+        passwordRow.add(passwordField, BorderLayout.CENTER); passwordRow.add(reveal, BorderLayout.EAST);
+        form.add(passwordRow, g);
 
         g.gridy = 6; g.insets = new Insets(0, 0, 20, 0);
         errorLabel = new JLabel(" ");
@@ -103,7 +109,7 @@ public class LoginDialog extends JDialog {
         form.add(errorLabel, g);
 
         g.gridy = 7; g.insets = new Insets(0, 0, 0, 0);
-        loginButton = RetailThemeManager.primaryButton("SIGN IN");
+        loginButton = RetailThemeManager.primaryButton("SIGN IN", "user");
         loginButton.setPreferredSize(new Dimension(300, 44));
         form.add(loginButton, g);
 

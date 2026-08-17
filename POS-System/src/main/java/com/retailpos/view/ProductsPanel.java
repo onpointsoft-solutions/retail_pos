@@ -309,7 +309,7 @@ public class ProductsPanel extends JPanel {
         d.setSize(440, 340); d.setLocationRelativeTo(this);
         JPanel panel = new JPanel(new BorderLayout(0, 12));
         panel.setBorder(new EmptyBorder(16, 16, 16, 16));
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(RetailThemeManager.CARD_BG);
 
         JLabel barLabel = new JLabel("No barcode set", SwingConstants.CENTER);
         JLabel qrLabel  = new JLabel("No QR set",     SwingConstants.CENTER);
@@ -348,7 +348,7 @@ public class ProductsPanel extends JPanel {
         d.setSize(600, 720); d.setLocationRelativeTo(this); d.setResizable(true);
 
         JPanel form = new JPanel(new GridBagLayout());
-        form.setBackground(Color.WHITE);
+        form.setBackground(RetailThemeManager.CARD_BG);
         form.setBorder(new EmptyBorder(20, 24, 20, 24));
         GridBagConstraints g = new GridBagConstraints();
         g.fill = GridBagConstraints.HORIZONTAL; g.weightx = 1;
@@ -356,7 +356,7 @@ public class ProductsPanel extends JPanel {
 
         // Text fields
         JTextField nameF    = formField(form, g, 0,  "Product Name *");
-        JTextField skuF     = formField(form, g, 2,  "SKU *");
+        JTextField skuF     = formField(form, g, 2,  "SKU (auto-generated if blank)");
         JTextField barcodeF = formField(form, g, 4,  "Barcode (optional)");
         JTextField buyF     = formField(form, g, 6,  "Buying Price *");
         JTextField sellF    = formField(form, g, 8,  "Selling Price *");
@@ -397,7 +397,7 @@ public class ProductsPanel extends JPanel {
         // Track expiry checkbox
         JCheckBox expiryBox = new JCheckBox("Track expiry dates / batch numbers");
         expiryBox.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        expiryBox.setBackground(Color.WHITE);
+        expiryBox.setBackground(RetailThemeManager.CARD_BG);
         g.gridx = 0; g.gridy = 28; g.weightx = 1;
         g.insets = new Insets(10, 0, 5, 0);
         form.add(expiryBox, g);
@@ -585,20 +585,22 @@ public class ProductsPanel extends JPanel {
     // ── Low-stock row renderer ────────────────────────────────────────────────
 
     private static class LowStockRenderer extends javax.swing.table.DefaultTableCellRenderer {
-        private static final Color LOW   = new Color(255, 243, 205);  // amber tint
-        private static final Color ZERO  = new Color(255, 220, 220);  // red tint
         @Override
         public Component getTableCellRendererComponent(JTable t, Object value,
                 boolean selected, boolean focused, int row, int col) {
             Component c = super.getTableCellRendererComponent(t, value, selected, focused, row, col);
             if (!selected) {
+                boolean dark = RetailThemeManager.getInstance().isDark();
                 try {
                     int stock = Integer.parseInt(t.getValueAt(row, 8).toString());
                     int min   = Integer.parseInt(t.getValueAt(row, 9).toString());
-                    if (stock == 0)          c.setBackground(ZERO);
-                    else if (stock <= min)   c.setBackground(LOW);
-                    else                     c.setBackground(Color.WHITE);
-                } catch (Exception ignored) { c.setBackground(Color.WHITE); }
+                    if (stock == 0)
+                        c.setBackground(dark ? new Color(80, 20, 20)  : new Color(255, 220, 220));
+                    else if (stock <= min)
+                        c.setBackground(dark ? new Color(70, 45, 10)  : new Color(255, 243, 205));
+                    else
+                        c.setBackground(RetailThemeManager.CARD_BG);
+                } catch (Exception ignored) { c.setBackground(RetailThemeManager.CARD_BG); }
             }
             return c;
         }

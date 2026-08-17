@@ -46,6 +46,10 @@ public final class MpesaUdpBridge {
                     recent.add(0, notice);
                     if (recent.size() > 50) recent.remove(recent.size() - 1);
                 }
+                // The receiving computer is the bridge's relay point. Upload
+                // immediately so every other connected station receives the
+                // M-Pesa confirmation through normal incremental sync.
+                com.retailpos.sync.SyncService.getInstance().notifyLocalChange();
                 byte[] acknowledgement = ("ACK:" + notice.code).getBytes(StandardCharsets.UTF_8);
                 try {
                     socket.send(new DatagramPacket(

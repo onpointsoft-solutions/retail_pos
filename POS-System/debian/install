@@ -1,0 +1,11 @@
+# debian/install
+# Maps source paths (relative to POS-System/) to destination paths inside the package.
+# debhelper copies each listed file to the given destination directory.
+# Note: the override_dh_auto_install in debian/rules handles the install
+# explicitly, so this file serves as the canonical human-readable manifest.
+
+target/BizFlowPOS.jar                              usr/share/bizflow-pos/
+src/main/resources/logo.png                        usr/share/pixmaps/bizflow-pos.png
+src/main/resources/application.properties         etc/bizflow-pos/
+packaging/bizflow-pos                              usr/bin/
+packaging/bizflow-pos.desktop                      usr/share/applications/

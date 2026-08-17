@@ -63,8 +63,12 @@ public class DatabaseManager {
             createMpesaTransactionsTable(s);
             createAuditLogsTable(s);
             createAppSettingsTable(s);
+            createJobCardsTable(s);
+            createJobCardServiceItemsTable(s);
+            createQuotationsTable(s);
+            createQuotationItemsTable(s);
+            migrateServiceTables(s);
             insertDefaultAdminIfEmpty(c);
-            insertDefaultCategoriesIfEmpty(c);
             insertDefaultSettingsIfEmpty(c);
             migrateDefaultBackendUrl(c);
         } catch (Exception e) {
@@ -98,9 +102,11 @@ public class DatabaseManager {
         s.execute("CREATE TABLE IF NOT EXISTS users (" +
             "id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, " +
             "role TEXT NOT NULL, full_name TEXT, active INTEGER DEFAULT 1, " +
+            "permissions TEXT, " +
             "failed_login_attempts INTEGER DEFAULT 0, lockout_until TEXT, " +
             "sync_status TEXT DEFAULT 'PENDING', created_at TEXT, updated_at TEXT)");
         s.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)");
+        try { s.execute("ALTER TABLE users ADD COLUMN permissions TEXT"); } catch (SQLException ignored) {}
     }
 
     private static void createMpesaTransactionsTable(Statement s) throws SQLException {
@@ -238,6 +244,100 @@ public class DatabaseManager {
             "key TEXT PRIMARY KEY, value TEXT)");
     }
 
+    // ── Services module ───────────────────────────────────────────────────────
+
+    private static void createJobCardsTable(Statement s) throws SQLException {
+        s.execute("CREATE TABLE IF NOT EXISTS job_cards (" +
+            "id TEXT PRIMARY KEY, " +
+            "job_number TEXT NOT NULL UNIQUE, " +
+            "customer_id TEXT, " +
+            "customer_name TEXT NOT NULL, " +
+            "customer_phone TEXT, " +
+            "asset_description TEXT NOT NULL, " +
+            "asset_serial TEXT, " +
+            "problem_description TEXT NOT NULL, " +
+            "diagnosis TEXT, " +
+            "resolution TEXT, " +
+            "technician_id TEXT, " +
+            "technician_name TEXT, " +
+            "labour_charge REAL DEFAULT 0, " +
+            "status TEXT NOT NULL DEFAULT 'OPEN', " +
+            "active_quotation_id TEXT, " +
+            "due_date TEXT, " +
+            "sync_status TEXT DEFAULT 'PENDING', " +
+            "created_at TEXT NOT NULL, " +
+            "updated_at TEXT NOT NULL)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_job_cards_status      ON job_cards(status)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_job_cards_customer    ON job_cards(customer_name)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_job_cards_created_at  ON job_cards(created_at)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_job_cards_job_number  ON job_cards(job_number)");
+    }
+
+    private static void createJobCardServiceItemsTable(Statement s) throws SQLException {
+        s.execute("CREATE TABLE IF NOT EXISTS job_card_service_items (" +
+            "id TEXT PRIMARY KEY, " +
+            "job_card_id TEXT NOT NULL, " +
+            "description TEXT NOT NULL, " +
+            "charge REAL DEFAULT 0, " +
+            "quantity INTEGER DEFAULT 1, " +
+            "FOREIGN KEY(job_card_id) REFERENCES job_cards(id))");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_jcsi_job_card_id ON job_card_service_items(job_card_id)");
+    }
+
+    private static void createQuotationsTable(Statement s) throws SQLException {
+        s.execute("CREATE TABLE IF NOT EXISTS quotations (" +
+            "id TEXT PRIMARY KEY, " +
+            "quotation_number TEXT NOT NULL UNIQUE, " +
+            "job_card_id TEXT NOT NULL, " +
+            "job_card_number TEXT, " +
+            "invoice_sale_id TEXT, " +
+            "customer_id TEXT, " +
+            "customer_name TEXT NOT NULL, " +
+            "customer_phone TEXT, " +
+            "subtotal REAL DEFAULT 0, " +
+            "discount_amount REAL DEFAULT 0, " +
+            "tax_amount REAL DEFAULT 0, " +
+            "labour_total REAL DEFAULT 0, " +
+            "grand_total REAL DEFAULT 0, " +
+            "notes TEXT, " +
+            "status TEXT NOT NULL DEFAULT 'DRAFT', " +
+            "created_by_id TEXT, " +
+            "created_by_name TEXT, " +
+            "valid_until TEXT, " +
+            "sync_status TEXT DEFAULT 'PENDING', " +
+            "created_at TEXT NOT NULL, " +
+            "updated_at TEXT NOT NULL, " +
+            "FOREIGN KEY(job_card_id) REFERENCES job_cards(id))");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_quotations_job_card_id ON quotations(job_card_id)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_quotations_status      ON quotations(status)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_quotations_created_at  ON quotations(created_at)");
+    }
+
+    /** Adds service columns safely for databases created before this module. */
+    private static void migrateServiceTables(Statement s) throws SQLException {
+        try { s.execute("ALTER TABLE quotations ADD COLUMN invoice_sale_id TEXT"); }
+        catch (SQLException ignored) { /* column already exists */ }
+        s.execute("CREATE INDEX IF NOT EXISTS idx_quotations_invoice_sale_id ON quotations(invoice_sale_id)");
+    }
+
+    private static void createQuotationItemsTable(Statement s) throws SQLException {
+        s.execute("CREATE TABLE IF NOT EXISTS quotation_items (" +
+            "id TEXT PRIMARY KEY, " +
+            "quotation_id TEXT NOT NULL, " +
+            "product_id TEXT, " +
+            "product_name TEXT NOT NULL, " +
+            "product_sku TEXT, " +
+            "quantity INTEGER DEFAULT 1, " +
+            "unit_price REAL DEFAULT 0, " +
+            "buying_price REAL DEFAULT 0, " +
+            "discount REAL DEFAULT 0, " +
+            "tax_rate REAL DEFAULT 0, " +
+            "line_total REAL DEFAULT 0, " +
+            "FOREIGN KEY(quotation_id) REFERENCES quotations(id))");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_quotation_items_quotation_id ON quotation_items(quotation_id)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_quotation_items_product_id   ON quotation_items(product_id)");
+    }
+
     private static void insertDefaultAdminIfEmpty(Connection c) throws SQLException {
         try (PreparedStatement check = c.prepareStatement("SELECT COUNT(*) FROM users WHERE role='ADMIN'")) {
             ResultSet rs = check.executeQuery();
@@ -254,27 +354,6 @@ public class DatabaseManager {
                     ins.setString(4, now);
                     ins.setString(5, now);
                     ins.executeUpdate();
-                }
-            }
-        }
-    }
-
-    private static void insertDefaultCategoriesIfEmpty(Connection c) throws SQLException {
-        try (PreparedStatement check = c.prepareStatement("SELECT COUNT(*) FROM categories")) {
-            ResultSet rs = check.executeQuery();
-            if (rs.next() && rs.getInt(1) == 0) {
-                String[] categories = {"General", "Food & Beverages", "Electronics", "Clothing", "Household"};
-                for (String cat : categories) {
-                    String id = UUID.randomUUID().toString();
-                    String now = LocalDateTime.now().toString();
-                    try (PreparedStatement ins = c.prepareStatement(
-                        "INSERT INTO categories(id,name,sync_status,created_at,updated_at) VALUES(?,?,'PENDING',?,?)")) {
-                        ins.setString(1, id);
-                        ins.setString(2, cat);
-                        ins.setString(3, now);
-                        ins.setString(4, now);
-                        ins.executeUpdate();
-                    }
                 }
             }
         }
@@ -314,4 +393,3 @@ public class DatabaseManager {
         }
     }
 }
-
