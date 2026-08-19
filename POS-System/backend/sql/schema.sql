@@ -344,4 +344,26 @@ CREATE TABLE IF NOT EXISTS app_settings (
     PRIMARY KEY (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ── Expenses ──────────────────────────────────────────────────────────────────
+-- Mirrors the SQLite expenses table created by DatabaseManager.java
+CREATE TABLE IF NOT EXISTS expenses (
+    id          VARCHAR(36)    NOT NULL,
+    category    VARCHAR(50)    NOT NULL DEFAULT 'OTHER'
+                    COMMENT 'RENT|UTILITIES|SALARIES|SUPPLIES|MAINTENANCE|TRANSPORT|MARKETING|INSURANCE|OTHER',
+    description VARCHAR(500)   NOT NULL,
+    amount      DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
+    date        DATE           NOT NULL,
+    reference   VARCHAR(200)   NULL,
+    created_by  VARCHAR(36)    NULL     COMMENT 'FK → users.id',
+    sync_status VARCHAR(20)    NOT NULL DEFAULT 'SYNCED',
+    created_at  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at  DATETIME       NULL,
+    PRIMARY KEY (id),
+    INDEX idx_expenses_date        (date),
+    INDEX idx_expenses_category    (category),
+    INDEX idx_expenses_sync_status (sync_status),
+    INDEX idx_expenses_updated_at  (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-public class SalesPanel extends JPanel {
+public class SalesPanel extends JPanel implements com.retailpos.ui.Refreshable {
     // Cart state
     private final List<Sale.SaleItem> cartItems = new ArrayList<>();
     private double transactionDiscount = 0;
@@ -43,6 +43,9 @@ public class SalesPanel extends JPanel {
     // Services
     private final ProductService productService = ProductService.getInstance();
     private final SaleService saleService = SaleService.getInstance();
+    // listener reference kept so we can unsubscribe cleanly on panel removal
+    private final ProductService.ProductChangeListener productChangeListener =
+        () -> SwingUtilities.invokeLater(this::loadCategoriesAndProducts);
     // Product grid for visual browsing
     private JPanel productGrid;
     private JScrollPane productGridScroll;
@@ -56,7 +59,15 @@ public class SalesPanel extends JPanel {
         loadSettings();
         buildUI();
         registerKeyboardShortcuts();
-        loadCategoriesAndProducts(); // load everything at once
+        loadCategoriesAndProducts();
+        // Reload the product grid immediately whenever any product is saved or deleted
+        productService.addChangeListener(productChangeListener);
+    }
+
+    /** Unsubscribe when this panel is removed from the hierarchy (e.g. logout). */
+    @Override public void removeNotify() {
+        super.removeNotify();
+        productService.removeChangeListener(productChangeListener);
     }
 
     private void loadSettings() {
@@ -980,6 +991,10 @@ public class SalesPanel extends JPanel {
         searchField.requestFocus();
         searchField.selectAll();
     }
+
+    @Override public void refreshData() { loadCategoriesAndProducts(); }
+    @Override public int getRefreshIntervalSeconds() { return 0; } // driven by ProductChangeListener + sync
+    @Override public String getPanelDescription() { return "Sales — scan or search products"; }
 
     private void sortProductGrid(String sortBy) {
         List<Product> filtered = activeCategoryId == null ? allProducts

@@ -63,6 +63,7 @@ public class DatabaseManager {
             createMpesaTransactionsTable(s);
             createAuditLogsTable(s);
             createAppSettingsTable(s);
+            createExpensesTable(s);
             createJobCardsTable(s);
             createJobCardServiceItemsTable(s);
             createQuotationsTable(s);
@@ -242,6 +243,21 @@ public class DatabaseManager {
     private static void createAppSettingsTable(Statement s) throws SQLException {
         s.execute("CREATE TABLE IF NOT EXISTS app_settings (" +
             "key TEXT PRIMARY KEY, value TEXT)");
+    }
+
+    private static void createExpensesTable(Statement s) throws SQLException {
+        s.execute("CREATE TABLE IF NOT EXISTS expenses (" +
+            "id TEXT PRIMARY KEY, " +
+            "category TEXT NOT NULL DEFAULT 'OTHER', " +
+            "description TEXT, " +
+            "amount REAL NOT NULL DEFAULT 0, " +
+            "date TEXT NOT NULL, " +
+            "reference TEXT, " +
+            "created_by TEXT, " +
+            "sync_status TEXT DEFAULT 'PENDING', " +
+            "created_at TEXT, updated_at TEXT)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date     ON expenses(date)");
+        s.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category)");
     }
 
     // ── Services module ───────────────────────────────────────────────────────

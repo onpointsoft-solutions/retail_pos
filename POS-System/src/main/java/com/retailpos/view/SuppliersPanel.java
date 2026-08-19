@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-public class SuppliersPanel extends JPanel {
+public class SuppliersPanel extends JPanel implements com.retailpos.ui.Refreshable {
 
     private DefaultTableModel tableModel;
     private JTable table;
@@ -113,6 +113,10 @@ public class SuppliersPanel extends JPanel {
             }
         }.execute();
     }
+
+    @Override public void refreshData() { loadAll(); }
+    @Override public int getRefreshIntervalSeconds() { return 120; }
+    @Override public String getPanelDescription() { return "Suppliers"; }
 
     private void addRow(Supplier s) {
         tableModel.addRow(new Object[]{

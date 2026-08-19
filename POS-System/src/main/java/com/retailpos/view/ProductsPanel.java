@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ProductsPanel extends JPanel {
+public class ProductsPanel extends JPanel implements com.retailpos.ui.Refreshable {
 
     // Standard unit-of-measure options
     public static final String[] UNITS = {
@@ -179,6 +179,10 @@ public class ProductsPanel extends JPanel {
         currentPage = 0;
         loadData();
     }
+
+    @Override public void refreshData() { loadData(); }
+    @Override public int getRefreshIntervalSeconds() { return 60; }
+    @Override public String getPanelDescription() { return "Products — catalogue"; }
 
     private void loadData() {
         String query   = searchField.getText().trim();

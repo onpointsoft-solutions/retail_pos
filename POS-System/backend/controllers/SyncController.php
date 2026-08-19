@@ -81,6 +81,11 @@ class SyncController
             'fields' => ['code', 'customer_name', 'amount', 'received_at',
                          'sync_status', 'created_at', 'updated_at'],
         ],
+        'expenses' => [
+            'table'  => 'expenses',
+            'fields' => ['category', 'description', 'amount', 'date', 'reference',
+                         'created_by', 'sync_status', 'created_at', 'updated_at'],
+        ],
         'users' => [
             'table'  => 'users',
             'fields' => ['username', 'password_hash', 'role', 'permissions', 'full_name', 'active',
@@ -291,6 +296,8 @@ class SyncController
             'mpesa_transactions'   => 'mpesa_transactions',
             'job_cards'            => 'job_cards',
             'quotations'           => 'quotations',
+            'expenses'             => 'expenses',
+            'categories'           => 'categories',
         ];
 
         $counts = [];
@@ -298,7 +305,7 @@ class SyncController
         $tablesWithDelete = ['products','sales','customers','suppliers',
                              'purchase_orders','users'];
         // Tables without deleted_at
-        $tablesNoDelete   = ['inventory_movements','categories','mpesa_transactions','job_cards','quotations'];
+        $tablesNoDelete   = ['inventory_movements','categories','mpesa_transactions','job_cards','quotations','expenses'];
 
         foreach ($entities as $name => $table) {
             try {

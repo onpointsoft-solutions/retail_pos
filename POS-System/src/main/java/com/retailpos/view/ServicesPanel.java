@@ -26,7 +26,7 @@ import java.util.List;
  *  Main table   : Job Card list
  *  Bottom strip : selected job card detail + linked quotation summary
  */
-public class ServicesPanel extends JPanel {
+public class ServicesPanel extends JPanel implements com.retailpos.ui.Refreshable {
 
     private static final DateTimeFormatter DT = DateTimeFormatter.ofPattern("dd/MM/yy HH:mm");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -331,6 +331,10 @@ public class ServicesPanel extends JPanel {
     }
 
     private void doSearch() { applyFilter(); }
+
+    @Override public void refreshData() { loadData(); }
+    @Override public int getRefreshIntervalSeconds() { return 60; }
+    @Override public String getPanelDescription() { return "Services — job cards"; }
 
     private void refreshStatusChips() {
         Map<String, Integer> counts = svc.getJobCardStatusCounts();

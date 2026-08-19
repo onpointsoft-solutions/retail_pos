@@ -509,7 +509,7 @@ public class RetailThemeManager {
         return p;
     }
 
-    private Color fieldBg() { return dark ? DARK_FIELD_BG : Color.WHITE; }
+    public Color fieldBg() { return dark ? DARK_FIELD_BG : Color.WHITE; }
     public Color selectionBg() { return dark ? DARK_SELECTION_BG : LIGHT_SELECTION_BG; }
     public Color selectionFg() { return dark ? DARK_SELECTION_FG : LIGHT_SELECTION_FG; }
 

@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public class SettingsPanel extends JPanel {
+public class SettingsPanel extends JPanel implements com.retailpos.ui.Refreshable {
     private AppSettings settings;
     private final SettingsRepository settingsRepo = new SettingsRepository();
     private final UserRepository userRepo = new UserRepository();
@@ -55,6 +55,10 @@ public class SettingsPanel extends JPanel {
         try { settings = settingsRepo.load(); }
         catch (Exception e) { settings = new AppSettings(); }
     }
+
+    @Override public void refreshData() { /* settings don't auto-refresh */ }
+    @Override public int getRefreshIntervalSeconds() { return 0; }
+    @Override public String getPanelDescription() { return "Settings"; }
 
     private void buildUI() {
         JTabbedPane tabs = new JTabbedPane();

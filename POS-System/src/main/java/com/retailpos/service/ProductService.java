@@ -10,6 +10,24 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class ProductService {
+
+    // ── Change listener ───────────────────────────────────────────────────────
+
+    public interface ProductChangeListener {
+        /** Called on the calling thread immediately after a product is saved or deleted. */
+        void onProductChanged();
+    }
+
+    private final List<ProductChangeListener> changeListeners = new CopyOnWriteArrayList<>();
+
+    public void addChangeListener(ProductChangeListener l)    { changeListeners.add(l); }
+    public void removeChangeListener(ProductChangeListener l) { changeListeners.remove(l); }
+
+    private void fireProductChanged() {
+        for (ProductChangeListener l : changeListeners) {
+            try { l.onProductChanged(); } catch (Exception ignored) {}
+        }
+    }
     private static ProductService instance;
     private final ProductRepository repo = new ProductRepository();
     private volatile List<Product> productCache;
@@ -125,6 +143,7 @@ public class ProductService {
             AuditLogger.log(userId, AuditLogger.PRODUCT_UPDATED, p.getId(), "name=" + p.getName());
         }
         invalidateCache();
+        fireProductChanged();
     }
 
     public String generateSku(String productName) {
@@ -165,6 +184,7 @@ public class ProductService {
         repo.softDelete(id);
         AuditLogger.log(userId, AuditLogger.PRODUCT_DELETED, id, "");
         invalidateCache();
+        fireProductChanged();
     }
 
     public void deactivate(String id, String userId) throws Exception {

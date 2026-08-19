@@ -12,7 +12,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
-public class DashboardPanel extends JPanel implements SaleService.SaleListener {
+public class DashboardPanel extends JPanel implements SaleService.SaleListener, com.retailpos.ui.Refreshable {
     private JLabel salesCountLabel, revenueLabel, profitLabel, stockValueLabel;
     private JLabel pendingSyncLabel, lowStockLabel, forecastLabel;
     private DefaultTableModel recentSalesModel;
@@ -116,6 +116,10 @@ public class DashboardPanel extends JPanel implements SaleService.SaleListener {
         refreshTimer = new Timer(60000, e -> loadData());
         refreshTimer.start();
     }
+
+    @Override public void refreshData() { loadData(); }
+    @Override public int getRefreshIntervalSeconds() { return 30; }
+    @Override public String getPanelDescription() { return "Dashboard — live data"; }
 
     private void loadData() {
         SwingWorker<Map<String, Object>, Void> worker = new SwingWorker<>() {

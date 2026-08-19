@@ -139,6 +139,47 @@ $routes = [
     // ── Backup ───────────────────────────────────────────────────────────────
     ['POST',   '#^/backup/upload$#',                   'BackupController',        'upload',              false],
     ['GET',    '#^/backup/list$#',                     'BackupController',        'listBackups',         false],
+
+    // ── Categories ───────────────────────────────────────────────────────────
+    ['GET',    '#^/categories$#',                              'CategoryController',  'index',             false],
+    ['POST',   '#^/categories$#',                              'CategoryController',  'store',             false],
+    ['GET',    '#^/categories/(?P<id>[^/]+)$#',                'CategoryController',  'show',              false],
+    ['PUT',    '#^/categories/(?P<id>[^/]+)$#',                'CategoryController',  'update',            false],
+    ['PATCH',  '#^/categories/(?P<id>[^/]+)$#',                'CategoryController',  'update',            false],
+    ['DELETE', '#^/categories/(?P<id>[^/]+)$#',                'CategoryController',  'destroy',           false],
+
+    // ── Expenses ─────────────────────────────────────────────────────────────
+    ['GET',    '#^/expenses$#',                                'ExpenseController',   'index',             false],
+    ['POST',   '#^/expenses$#',                                'ExpenseController',   'store',             false],
+    ['GET',    '#^/expenses/summary$#',                        'ExpenseController',   'summary',           false],
+    ['GET',    '#^/expenses/(?P<id>[^/]+)$#',                  'ExpenseController',   'show',              false],
+    ['PUT',    '#^/expenses/(?P<id>[^/]+)$#',                  'ExpenseController',   'update',            false],
+    ['PATCH',  '#^/expenses/(?P<id>[^/]+)$#',                  'ExpenseController',   'update',            false],
+    ['DELETE', '#^/expenses/(?P<id>[^/]+)$#',                  'ExpenseController',   'destroy',           false],
+
+    // ── Job Cards (Services) ──────────────────────────────────────────────────
+    ['GET',    '#^/job-cards$#',                               'JobCardController',   'index',             false],
+    ['POST',   '#^/job-cards$#',                               'JobCardController',   'store',             false],
+    ['GET',    '#^/job-cards/(?P<id>[^/]+)$#',                 'JobCardController',   'show',              false],
+    ['PUT',    '#^/job-cards/(?P<id>[^/]+)$#',                 'JobCardController',   'update',            false],
+    ['PATCH',  '#^/job-cards/(?P<id>[^/]+)$#',                 'JobCardController',   'update',            false],
+    ['DELETE', '#^/job-cards/(?P<id>[^/]+)$#',                 'JobCardController',   'destroy',           false],
+
+    // ── Reports ───────────────────────────────────────────────────────────────
+    ['GET',    '#^/reports/sales$#',                           'ReportController',    'sales',             false],
+    ['GET',    '#^/reports/profit-loss$#',                     'ReportController',    'profitLoss',        false],
+    ['GET',    '#^/reports/best-sellers$#',                    'ReportController',    'bestSellers',       false],
+    ['GET',    '#^/reports/cashier-performance$#',             'ReportController',    'cashierPerformance',false],
+    ['GET',    '#^/reports/sales-by-category$#',               'ReportController',    'salesByCategory',   false],
+    ['GET',    '#^/reports/tax$#',                             'ReportController',    'tax',               false],
+    ['GET',    '#^/reports/low-stock$#',                       'ReportController',    'lowStock',          false],
+    ['GET',    '#^/reports/inventory-valuation$#',             'ReportController',    'inventoryValuation',false],
+    ['GET',    '#^/reports/daily-trend$#',                     'ReportController',    'dailyTrend',        false],
+
+    // ── Analytics ─────────────────────────────────────────────────────────────
+    ['GET',    '#^/analytics/income-vs-expenses$#',            'AnalyticsController', 'incomeVsExpenses',  false],
+    ['GET',    '#^/analytics/market-basket$#',                 'AnalyticsController', 'marketBasket',      false],
+    ['GET',    '#^/analytics/revenue-breakdown$#',             'AnalyticsController', 'revenueBreakdown',  false],
 ];
 
 // ── Autoloader ───────────────────────────────────────────────────────────────

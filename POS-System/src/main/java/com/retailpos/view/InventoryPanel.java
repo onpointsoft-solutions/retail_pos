@@ -14,7 +14,7 @@ import java.awt.*;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class InventoryPanel extends JPanel {
+public class InventoryPanel extends JPanel implements com.retailpos.ui.Refreshable {
     private DefaultTableModel movementsModel;
     private DefaultTableModel lowStockModel;
     private final InventoryService inventoryService = InventoryService.getInstance();
@@ -97,6 +97,10 @@ public class InventoryPanel extends JPanel {
             @Override protected void done() {}
         }.execute();
     }
+
+    @Override public void refreshData() { loadData(); }
+    @Override public int getRefreshIntervalSeconds() { return 60; }
+    @Override public String getPanelDescription() { return "Inventory — stock movements"; }
 
     private void showAdjustDialog() {
         String productName = JOptionPane.showInputDialog(this, "Enter product name or SKU:");

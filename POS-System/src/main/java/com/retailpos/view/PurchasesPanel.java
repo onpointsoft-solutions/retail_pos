@@ -24,7 +24,7 @@ import java.util.List;
  * - Receive dialog: shows all line items, supports partial delivery per line
  * - View detail dialog for any existing PO
  */
-public class PurchasesPanel extends JPanel {
+public class PurchasesPanel extends JPanel implements com.retailpos.ui.Refreshable {
 
     // Status badge colours
     private static final Map<String, Color> STATUS_COLORS = Map.of(
@@ -155,6 +155,10 @@ public class PurchasesPanel extends JPanel {
             }
         }.execute();
     }
+
+    @Override public void refreshData() { loadData(); }
+    @Override public int getRefreshIntervalSeconds() { return 120; }
+    @Override public String getPanelDescription() { return "Purchases — purchase orders"; }
 
     private PurchaseOrder getSelected() {
         int row = table.getSelectedRow();

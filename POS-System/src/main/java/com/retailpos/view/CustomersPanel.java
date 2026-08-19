@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-public class CustomersPanel extends JPanel {
+public class CustomersPanel extends JPanel implements com.retailpos.ui.Refreshable {
     private DefaultTableModel tableModel;
     private JTable table;
     private JTextField searchField;
@@ -90,6 +90,10 @@ public class CustomersPanel extends JPanel {
             }
         }.execute();
     }
+
+    @Override public void refreshData() { loadAll(); }
+    @Override public int getRefreshIntervalSeconds() { return 120; }
+    @Override public String getPanelDescription() { return "Customers — loyalty & credit"; }
 
     private void populate(List<Customer> list) {
         tableModel.setRowCount(0);

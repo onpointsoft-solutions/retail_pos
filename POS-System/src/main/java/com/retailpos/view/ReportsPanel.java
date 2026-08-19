@@ -13,7 +13,7 @@ import com.retailpos.repository.SettingsRepository;
 import java.util.*;
 import java.util.List;
 
-public class ReportsPanel extends JPanel {
+public class ReportsPanel extends JPanel implements com.retailpos.ui.Refreshable {
     private static final String[] REPORT_TYPES = {
         "Daily Sales", "Period Sales", "Profit Report", "Tax Report",
         "Best Selling Products", "Low Stock Report", "Inventory Valuation",
@@ -78,6 +78,10 @@ public class ReportsPanel extends JPanel {
         statusLabel = RetailThemeManager.subLabel("Select a report type and click Generate");
         add(statusLabel, BorderLayout.SOUTH);
     }
+
+    @Override public void refreshData() { /* reports are on-demand — no auto-refresh */ }
+    @Override public int getRefreshIntervalSeconds() { return 0; }
+    @Override public String getPanelDescription() { return "Reports — on-demand"; }
 
     private JSpinner createDateSpinner(LocalDate defaultDate) {
         SpinnerDateModel model = new SpinnerDateModel();
